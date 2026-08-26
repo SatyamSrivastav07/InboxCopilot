@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
-from app.gmail.auth import GmailAuthService
+from app.gmail.auth import GMAIL_READONLY_SCOPE, GMAIL_SEND_SCOPE, GmailAuthService
 from app.gmail.dependencies import get_gmail_auth_service, get_gmail_fetcher
-from app.gmail.errors import GmailError, GmailParseError
+from app.gmail.errors import GmailError, GmailNotConnectedError, GmailParseError
 from app.gmail.fetcher import GmailFetcher
 from app.gmail.parser import parse_gmail_message
 from app.gmail.schemas import (
@@ -31,7 +31,17 @@ router = APIRouter(prefix="/api/gmail", tags=["gmail"])
 def gmail_status(
     auth: Annotated[GmailAuthService, Depends(get_gmail_auth_service)],
 ) -> GmailStatus:
-    return GmailStatus(connected=auth.is_connected())
+    try:
+        credentials = auth.get_credentials()
+    except GmailNotConnectedError:
+        return GmailStatus(connected=False, can_read=False, can_send=False)
+
+    granted_scopes = set(credentials.scopes or [])
+    return GmailStatus(
+        connected=True,
+        can_read=GMAIL_READONLY_SCOPE in granted_scopes,
+        can_send=GMAIL_SEND_SCOPE in granted_scopes,
+    )
 
 
 @router.get("/auth-url", response_model=GmailAuthUrl)

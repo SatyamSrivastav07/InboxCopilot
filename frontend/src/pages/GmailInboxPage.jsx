@@ -7,7 +7,7 @@ import { getGmailAuthUrl, getGmailStatus, syncGmailInbox } from '../services/api
 
 export default function GmailInboxPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [connected, setConnected] = useState(null)
+  const [gmailStatus, setGmailStatus] = useState(null)
   const [limit, setLimit] = useState(10)
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
@@ -22,10 +22,10 @@ export default function GmailInboxPage() {
   useEffect(() => {
     let active = true
     getGmailStatus()
-      .then((status) => active && setConnected(status.connected))
+      .then((status) => active && setGmailStatus(status))
       .catch((requestError) => {
         if (active) {
-          setConnected(false)
+          setGmailStatus({ connected: false, can_read: false, can_send: false })
           setError(requestError.message)
         }
       })
@@ -51,7 +51,9 @@ export default function GmailInboxPage() {
       setSyncResult(await syncGmailInbox({ limit, unread_only: unreadOnly }))
     } catch (requestError) {
       setError(requestError.message)
-      if (requestError.message.toLowerCase().includes('not connected')) setConnected(false)
+      if (requestError.message.toLowerCase().includes('not connected')) {
+        setGmailStatus({ connected: false, can_read: false, can_send: false })
+      }
     } finally {
       setIsSyncing(false)
     }
@@ -69,18 +71,22 @@ export default function GmailInboxPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">Gmail inbox</p>
             <h2 className="mt-1 text-2xl font-semibold">Analyze your recent email</h2>
             <div className="mt-3 flex items-center gap-2 text-sm">
-              <span className={`h-2.5 w-2.5 rounded-full ${connected ? 'bg-emerald-500' : connected === false ? 'bg-slate-300' : 'animate-pulse bg-amber-400'}`} />
-              <span className="text-slate-600">{connected ? 'Gmail connected — read-only' : connected === false ? 'Gmail not connected' : 'Checking connection…'}</span>
+              <span className={`h-2.5 w-2.5 rounded-full ${gmailStatus?.connected ? 'bg-emerald-500' : gmailStatus?.connected === false ? 'bg-slate-300' : 'animate-pulse bg-amber-400'}`} />
+              <span className="text-slate-600">
+                {gmailStatus?.connected
+                  ? `Gmail connected — ${gmailStatus.can_send ? 'read + send' : 'read-only'}`
+                  : gmailStatus?.connected === false ? 'Gmail not connected' : 'Checking connection…'}
+              </span>
             </div>
           </div>
-          {connected === false && (
+          {gmailStatus?.connected === false && (
             <button className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-indigo-400" type="button" onClick={connect} disabled={isConnecting}>
               {isConnecting ? 'Opening Google…' : 'Connect Gmail'}
             </button>
           )}
         </div>
 
-        {connected && (
+        {gmailStatus?.connected && (
           <div className="mt-6 flex flex-col gap-4 border-t pt-5 sm:flex-row sm:items-end">
             <label className="text-sm font-medium text-slate-700">
               Messages to analyze

@@ -28,6 +28,8 @@ class GmailEmail(GmailModel):
 
 class GmailStatus(GmailModel):
     connected: bool
+    can_read: bool
+    can_send: bool
 
 
 class GmailAuthUrl(GmailModel):

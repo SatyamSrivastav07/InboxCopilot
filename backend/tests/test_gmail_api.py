@@ -9,7 +9,7 @@ from app.genai.analyzer import get_email_analyzer
 from app.config import Settings
 from app.database.dependencies import get_db
 from app.gmail.auth import GMAIL_READONLY_SCOPE, GMAIL_SCOPES, GMAIL_SEND_SCOPE, GmailAuthService
-from app.gmail.dependencies import get_gmail_fetcher
+from app.gmail.dependencies import get_gmail_auth_service, get_gmail_fetcher
 from app.gmail.parser import parse_gmail_message
 from app.main import app
 from app.schemas.email import EmailAnalysis, EmailInput
@@ -84,6 +84,11 @@ class StubIndexer:
         return IndexResult(email_id=email.id, chunks_created=1, skipped=False)
 
 
+class ConnectedAuth:
+    def get_credentials(self):
+        return Mock(scopes=list(GMAIL_SCOPES))
+
+
 def test_gmail_scope_is_read_only():
     assert GMAIL_READONLY_SCOPE == "https://www.googleapis.com/auth/gmail.readonly"
 
@@ -114,6 +119,21 @@ def test_authorization_url_uses_minimal_read_and_send_scopes(tmp_path: Path):
     assert query["code_challenge"][0]
     assert auth_service._pending_states[query["state"][0]][1]
     assert settings.google_client_secret not in authorization_url
+
+
+def test_gmail_status_reports_read_and_send_capabilities():
+    app.dependency_overrides[get_gmail_auth_service] = lambda: ConnectedAuth()
+    try:
+        response = TestClient(app).get("/api/gmail/status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "connected": True,
+        "can_read": True,
+        "can_send": True,
+    }
 
 
 def test_sync_continues_when_individual_messages_fail(override_db):
