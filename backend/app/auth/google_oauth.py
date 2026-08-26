@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import secrets
 import time
+import os
 from dataclasses import dataclass
 from typing import Any, MutableMapping
+from urllib.parse import urlparse
 
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials
@@ -45,9 +47,21 @@ class GoogleOAuthService:
         }
 
     def _flow(self, state: str | None = None) -> Flow:
+        self._allow_local_http_callback()
         flow = Flow.from_client_config(self._client_config(), scopes=GMAIL_SCOPES, state=state)
         flow.redirect_uri = self.settings.google_redirect_uri
         return flow
+
+    def _allow_local_http_callback(self) -> None:
+        """OAuthlib requires HTTPS except for an explicitly local development callback."""
+        callback = urlparse(self.settings.google_redirect_uri)
+        is_local_http = (
+            self.settings.app_env != "production"
+            and callback.scheme == "http"
+            and callback.hostname in {"localhost", "127.0.0.1", "::1"}
+        )
+        if is_local_http:
+            os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
 
     def authorization_url(self, browser_session: MutableMapping[str, Any]) -> str:
         state = secrets.token_urlsafe(32)

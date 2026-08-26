@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -51,6 +52,14 @@ def test_google_authorization_binds_state_and_pkce_verifier_to_browser_session(t
     assert browser_session["google_oauth_pending"]["code_verifier"]
     assert "openid" in query["scope"][0].split()
     assert "email" in query["scope"][0].split()
+
+
+def test_local_http_google_callback_enables_only_oauthlib_development_mode(tmp_path, monkeypatch):
+    monkeypatch.delenv("OAUTHLIB_INSECURE_TRANSPORT", raising=False)
+
+    GoogleOAuthService(oauth_settings(tmp_path)).authorization_url({})
+
+    assert os.environ["OAUTHLIB_INSECURE_TRANSPORT"] == "1"
 
 
 def test_google_oauth_rejects_a_callback_with_the_wrong_state(tmp_path):
