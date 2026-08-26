@@ -13,7 +13,11 @@ class MeetingRepository:
         self.db = db
 
     def list(
-        self, *, date_from: date | None = None, date_to: date | None = None
+        self,
+        *,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int | None = None,
     ) -> list[MeetingRecord]:
         query = select(MeetingRecord).options(selectinload(MeetingRecord.email))
         if date_from is not None:
@@ -23,6 +27,8 @@ class MeetingRepository:
         query = query.order_by(
             MeetingRecord.normalized_date.asc().nullslast(), MeetingRecord.id.desc()
         )
+        if limit is not None:
+            query = query.limit(limit)
         return list(self.db.scalars(query))
 
     def count_upcoming(self, today: date) -> int:
@@ -31,4 +37,3 @@ class MeetingRepository:
                 MeetingRecord.normalized_date >= today
             )
         ) or 0
-

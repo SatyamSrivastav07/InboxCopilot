@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime, time, timezone
+
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -36,6 +38,8 @@ class EmailRepository:
         category: str | None = None,
         priority: str | None = None,
         reply_required: bool | None = None,
+        received_from: date | None = None,
+        received_to: date | None = None,
     ) -> list[EmailRecord]:
         query = select(EmailRecord)
         if category is not None:
@@ -44,6 +48,16 @@ class EmailRepository:
             query = query.where(EmailRecord.priority == priority)
         if reply_required is not None:
             query = query.where(EmailRecord.reply_required.is_(reply_required))
+        if received_from is not None:
+            query = query.where(
+                EmailRecord.received_at
+                >= datetime.combine(received_from, time.min, tzinfo=timezone.utc)
+            )
+        if received_to is not None:
+            query = query.where(
+                EmailRecord.received_at
+                <= datetime.combine(received_to, time.max, tzinfo=timezone.utc)
+            )
         query = self._with_analysis(
             query.order_by(EmailRecord.received_at.desc().nullslast(), EmailRecord.id.desc())
             .limit(limit)
@@ -57,6 +71,42 @@ class EmailRepository:
 
     def count(self) -> int:
         return self.db.scalar(select(func.count(EmailRecord.id))) or 0
+
+    def count_filtered(
+        self,
+        *,
+        category: str | None = None,
+        priority: str | None = None,
+        reply_required: bool | None = None,
+        received_from: date | None = None,
+        received_to: date | None = None,
+    ) -> int:
+        query = select(func.count(EmailRecord.id))
+        if category is not None:
+            query = query.where(EmailRecord.category == category)
+        if priority is not None:
+            query = query.where(EmailRecord.priority == priority)
+        if reply_required is not None:
+            query = query.where(EmailRecord.reply_required.is_(reply_required))
+        if received_from is not None:
+            query = query.where(
+                EmailRecord.received_at
+                >= datetime.combine(received_from, time.min, tzinfo=timezone.utc)
+            )
+        if received_to is not None:
+            query = query.where(
+                EmailRecord.received_at
+                <= datetime.combine(received_to, time.max, tzinfo=timezone.utc)
+            )
+        return self.db.scalar(query) or 0
+
+    def priority_counts(self) -> dict[str, int]:
+        rows = self.db.execute(
+            select(EmailRecord.priority, func.count(EmailRecord.id)).group_by(
+                EmailRecord.priority
+            )
+        )
+        return {str(priority): int(count) for priority, count in rows}
 
     def list_all_for_indexing(self) -> list[EmailRecord]:
         return list(self.db.scalars(select(EmailRecord).order_by(EmailRecord.id)))

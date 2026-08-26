@@ -1,8 +1,8 @@
-# AI Inbox Copilot — Phase 4
+# AI Inbox Copilot — Phase 5
 
-AI Inbox Copilot now provides semantic search and grounded question answering over persisted Gmail history. PostgreSQL remains the source of truth; Chroma is a rebuildable local retrieval index. Mistral supplies `mistral-embed` embeddings and the existing chat model.
+AI Inbox Copilot now routes natural-language questions to safe PostgreSQL queries, the Phase 4 semantic RAG pipeline, or a hybrid of both. PostgreSQL remains the structured source of truth; Chroma remains a rebuildable semantic index.
 
-Phase 4 does not include reply drafting, Gmail sending, SQL/RAG routing, Redis, Celery, Docker, or deployment.
+Phase 5 does not include arbitrary text-to-SQL, reply drafting, Gmail sending, Redis, Celery, Docker, or deployment.
 
 ## Architecture
 
@@ -11,11 +11,68 @@ Gmail sync -> analysis -> PostgreSQL -> VectorIndexer -> Chroma
 
 Question -> RunnablePassthrough + retriever -> compact context
          -> RAG prompt -> Mistral -> StrOutputParser -> answer + sources
+
+Inbox question -> QueryRoute -> RunnableBranch
+  ├── structured -> validated parameters -> repository -> deterministic answer
+  ├── semantic   -> existing Phase 4 RAG
+  ├── hybrid     -> RunnableParallel(PostgreSQL, Chroma) -> Mistral synthesis
+  └── unsupported -> safe deterministic response
 ```
 
 Newly persisted and cached Gmail messages pass through the indexer. Unchanged messages are skipped using deterministic chunk IDs and a content hash. Existing PostgreSQL data can rebuild Chroma at any time.
 
-## Phase 4 structure
+## Phase 5 intelligent query router
+
+Created modules:
+
+```text
+backend/app/genai/query_router.py
+backend/app/genai/inbox_workflow.py
+backend/app/schemas/query.py
+backend/app/services/structured_query_service.py
+backend/tests/test_query_router.py
+```
+
+`QueryRouter` uses explicit LCEL `ChatPromptTemplate | ChatMistralAI | PydanticOutputParser` chains. It first returns a validated `QueryRoute` with `route`, `intent`, `reason`, and routing `confidence`. Structured and hybrid paths then extract a separate validated `StructuredQuery`.
+
+The actual workflow uses `RunnableBranch`, not an API-level if/else router:
+
+```python
+RunnableLambda(route_question) | RunnableBranch(
+    structured_condition_and_chain,
+    semantic_condition_and_chain,
+    hybrid_condition_and_chain,
+    unsupported_fallback,
+)
+```
+
+Supported structured intents are `list_tasks`, `count_tasks`, `list_deadlines`, `list_meetings`, `count_emails`, `list_emails`, `needs_reply`, and `priority_summary`. The model never writes SQL. `StructuredQueryService` maps the allow-listed intent and validated filters to repository methods.
+
+Hybrid execution explicitly uses:
+
+```python
+RunnableParallel(
+    structured=validated_postgresql_query,
+    semantic=existing_phase_4_retrieval,
+)
+```
+
+The synthesis prompt receives only those two evidence sets. Structured facts are authoritative for counts/status/deadlines; semantic evidence explains relevant email context. Returned citations are built from retrieved/database records rather than model output.
+
+The existing endpoint is upgraded in place:
+
+```http
+POST /api/chat/inbox
+Content-Type: application/json
+
+{"question":"What should I prioritize today?"}
+```
+
+Its response now includes `answer`, `sources`, `route`, `intent`, `reason`, and `confidence`. The React Assistant displays the chosen route and confidence. Semantic Search remains retrieval-only at `POST /api/search/semantic`.
+
+Phase 5 adds no dependencies and no environment variables.
+
+## Phase 4 retrieval structure
 
 ```text
 backend/app/
@@ -42,7 +99,7 @@ Integration updates also touch `backend/app/config.py`, `backend/app/main.py`, `
 
 ## Dependencies and environment
 
-Phase 4 adds only:
+Phase 4 added only:
 
 ```text
 chromadb>=1.0,<2.0
@@ -216,8 +273,8 @@ Tests use SQLite, an ephemeral Chroma collection, and fake deterministic embeddi
 
 - Single-user local Chroma collection; future user isolation is not implemented.
 - Gmail sync is still an explicit UI/API action. Phase 4 indexes automatically during sync but adds no scheduled/background polling because that is outside this phase.
-- Semantic cosine retrieval only; no SQL/vector router, hybrid search, or MMR.
+- Semantic retrieval uses cosine similarity; hybrid routing combines it with safe structured repository queries but does not implement arbitrary SQL generation or a general SQL query planner.
 - Direct out-of-app PostgreSQL changes can leave stale vectors until reindex.
 - No attachment indexing, full conversation memory, reply generation, Gmail sending, or production deployment.
 
-Phase 4 stops here. Phase 5 features are intentionally excluded.
+Phase 5 stops here. Reply generation and later-phase features are intentionally excluded.

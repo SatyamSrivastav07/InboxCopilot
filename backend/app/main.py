@@ -23,12 +23,13 @@ from app.gmail.errors import (
     GmailParseError,
     GmailRateLimitError,
 )
+from app.genai.query_router import QueryRoutingError
 from app.genai.rag import RAGGenerationError
 from app.vectorstore.errors import VectorStoreError
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="AI Inbox Copilot API", version="0.4.0")
+    app = FastAPI(title="AI Inbox Copilot API", version="0.5.0")
     settings = get_settings()
     app.add_middleware(
         CORSMiddleware,
@@ -109,6 +110,12 @@ def create_app() -> FastAPI:
     @app.exception_handler(RAGGenerationError)
     async def rag_generation_error_handler(
         _request: Request, exc: RAGGenerationError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+    @app.exception_handler(QueryRoutingError)
+    async def query_routing_error_handler(
+        _request: Request, exc: QueryRoutingError
     ) -> JSONResponse:
         return JSONResponse(status_code=502, content={"detail": str(exc)})
 

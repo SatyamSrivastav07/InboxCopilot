@@ -1,10 +1,10 @@
 from fastapi.testclient import TestClient
 
-from app.genai.rag import InboxRAG
 from app.main import app
-from app.schemas.search import AskInboxResponse, InboxSource, ReindexResponse
-from app.services.dependencies import get_reindex_service
-from app.vectorstore.dependencies import get_inbox_rag, get_vector_retriever
+from app.schemas.query import RoutedInboxResponse
+from app.schemas.search import InboxSource, ReindexResponse
+from app.services.dependencies import get_inbox_query_workflow, get_reindex_service
+from app.vectorstore.dependencies import get_vector_retriever
 from app.vectorstore.retriever import RetrievedEmail
 
 
@@ -29,10 +29,10 @@ class StubRetriever:
         return [retrieved()]
 
 
-class StubRAG:
+class StubWorkflow:
     def ask(self, question, *, top_k=None, filters=None):
         assert question == "When is production deployment?"
-        return AskInboxResponse(
+        return RoutedInboxResponse(
             answer="Production deployment is scheduled for Friday.",
             sources=[
                 InboxSource(
@@ -43,6 +43,10 @@ class StubRAG:
                     snippet="Production deployment is scheduled for Friday.",
                 )
             ],
+            route="semantic",
+            intent="deployment_discussion",
+            reason="The question asks what an email discussed.",
+            confidence=0.96,
         )
 
 
@@ -67,7 +71,7 @@ def test_semantic_search_api_returns_citable_email():
 
 
 def test_inbox_chat_api_returns_answer_and_sources():
-    app.dependency_overrides[get_inbox_rag] = lambda: StubRAG()
+    app.dependency_overrides[get_inbox_query_workflow] = lambda: StubWorkflow()
     try:
         response = TestClient(app).post(
             "/api/chat/inbox", json={"question": "When is production deployment?"}
@@ -78,6 +82,7 @@ def test_inbox_chat_api_returns_answer_and_sources():
     assert response.status_code == 200
     assert response.json()["answer"].endswith("Friday.")
     assert response.json()["sources"][0]["email_id"] == 3
+    assert response.json()["route"] == "semantic"
 
 
 def test_reindex_api_reports_rebuilt_collection():

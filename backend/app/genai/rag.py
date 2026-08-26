@@ -112,6 +112,31 @@ class InboxRAG:
         top_k: int | None = None,
         filters: SearchFilters | None = None,
     ) -> AskInboxResponse:
+        results = self.retrieve(question, top_k=top_k, filters=filters)
+        if not results:
+            logger.info("RAG generation skipped because evidence was insufficient")
+            return AskInboxResponse(answer=NO_EVIDENCE_ANSWER, sources=[])
+        state = {"question": question, "results": results}
+
+        logger.info("RAG generation started with %s sources", len(results))
+        try:
+            answer = self._answer_chain().invoke(state)
+        except Exception as exc:
+            logger.exception("RAG generation failed")
+            raise RAGGenerationError(
+                "Mistral could not generate an inbox answer. Please try again."
+            ) from exc
+        logger.info("RAG generation completed")
+        return AskInboxResponse(answer=answer.strip(), sources=format_sources(results))
+
+    def retrieve(
+        self,
+        question: str,
+        *,
+        top_k: int | None = None,
+        filters: SearchFilters | None = None,
+    ) -> list[RetrievedEmail]:
+        """Expose the existing Phase 4 retrieval stage for hybrid composition."""
         logger.info("RAG retrieval started")
         state = self.retrieval_chain.invoke(
             {
@@ -126,18 +151,4 @@ class InboxRAG:
             for item in results
             if item.score >= self.settings.rag_score_threshold
         ]
-        if not results:
-            logger.info("RAG generation skipped because evidence was insufficient")
-            return AskInboxResponse(answer=NO_EVIDENCE_ANSWER, sources=[])
-        state["results"] = results
-
-        logger.info("RAG generation started with %s sources", len(results))
-        try:
-            answer = self._answer_chain().invoke(state)
-        except Exception as exc:
-            logger.exception("RAG generation failed")
-            raise RAGGenerationError(
-                "Mistral could not generate an inbox answer. Please try again."
-            ) from exc
-        logger.info("RAG generation completed")
-        return AskInboxResponse(answer=answer.strip(), sources=format_sources(results))
+        return results

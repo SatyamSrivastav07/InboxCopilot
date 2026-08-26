@@ -26,6 +26,7 @@ class TaskRepository:
         priority: str | None = None,
         deadline_from: date | None = None,
         deadline_to: date | None = None,
+        limit: int | None = None,
     ) -> list[TaskRecord]:
         query = select(TaskRecord).options(selectinload(TaskRecord.email))
         if completed is not None:
@@ -41,10 +42,30 @@ class TaskRepository:
             TaskRecord.normalized_deadline.asc().nullslast(),
             TaskRecord.id.desc(),
         )
+        if limit is not None:
+            query = query.limit(limit)
         return list(self.db.scalars(query))
+
+    def count(
+        self,
+        *,
+        completed: bool | None = None,
+        priority: str | None = None,
+        deadline_from: date | None = None,
+        deadline_to: date | None = None,
+    ) -> int:
+        query = select(func.count(TaskRecord.id))
+        if completed is not None:
+            query = query.where(TaskRecord.completed.is_(completed))
+        if priority is not None:
+            query = query.where(TaskRecord.priority == priority)
+        if deadline_from is not None:
+            query = query.where(TaskRecord.normalized_deadline >= deadline_from)
+        if deadline_to is not None:
+            query = query.where(TaskRecord.normalized_deadline <= deadline_to)
+        return self.db.scalar(query) or 0
 
     def count_pending(self) -> int:
         return self.db.scalar(
             select(func.count(TaskRecord.id)).where(TaskRecord.completed.is_(False))
         ) or 0
-

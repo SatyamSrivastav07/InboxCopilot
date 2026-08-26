@@ -100,6 +100,13 @@ export default function AssistantPage() {
           <p className="text-sm font-semibold text-indigo-700">You</p>
           <p className="mt-1 text-sm text-slate-700">{item.question}</p>
           <p className="mt-5 text-sm font-semibold text-emerald-700">Inbox Copilot</p>
+          {item.route && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-full bg-indigo-50 px-2.5 py-1 font-semibold uppercase tracking-wide text-indigo-700">{item.route}</span>
+              <span className="text-slate-500">{item.intent?.replaceAll('_', ' ')}</span>
+              <span className="text-slate-400">{Math.round((item.confidence || 0) * 100)}% routing confidence</span>
+            </div>
+          )}
           <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-800">{item.answer}</p>
           <Sources sources={item.sources} onOpen={openEmail} />
         </section>

@@ -120,12 +120,10 @@ export async function semanticSearch(query, options = {}) {
   }
 }
 
-export async function askInbox(question, options = {}) {
+export async function askInbox(question) {
   try {
     const { data } = await api.post('/api/chat/inbox', {
       question,
-      top_k: options.topK || undefined,
-      filters: options.filters || undefined,
     })
     return data
   } catch (error) {
