@@ -19,3 +19,4 @@ redis>=5.2,<7.0
 tenacity>=9.0,<10.0
 pydantic-settings>=2.7,<3.0
 cryptography>=42.0,<47.0
+itsdangerous>=2.2,<3.0

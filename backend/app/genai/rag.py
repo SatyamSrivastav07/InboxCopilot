@@ -69,10 +69,12 @@ class InboxRAG:
         retriever: VectorRetriever,
         settings: Settings,
         model: ChatMistralAI | None = None,
+        user_id: int | None = None,
     ) -> None:
         self.retriever = retriever
         self.settings = settings
         self.model = model
+        self.user_id = user_id
 
         # RunnablePassthrough preserves the original question/filters while
         # RunnableLambda adds retrieved evidence to the same state dictionary.
@@ -81,11 +83,13 @@ class InboxRAG:
         )
 
     def _retrieve(self, payload: dict[str, Any]) -> list[RetrievedEmail]:
-        return self.retriever.search(
-            payload["question"],
-            top_k=payload["top_k"],
-            filters=payload.get("filters"),
-        )
+        kwargs: dict[str, Any] = {
+            "top_k": payload["top_k"],
+            "filters": payload.get("filters"),
+        }
+        if self.user_id is not None:
+            kwargs["user_id"] = self.user_id
+        return self.retriever.search(payload["question"], **kwargs)
 
     def _answer_chain(self):
         if self.model is None:

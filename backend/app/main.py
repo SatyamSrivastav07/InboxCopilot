@@ -4,9 +4,11 @@ import uuid
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.analyze import router as analyze_router
+from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.dashboard import router as dashboard_router
 from app.api.drafts import router as drafts_router
@@ -48,14 +50,22 @@ def create_app() -> FastAPI:
     settings = get_settings()
     settings.validate_production_requirements()
     configure_logging(settings.log_level)
-    app = FastAPI(title="AI Inbox Copilot API", version="0.8.0")
+    app = FastAPI(title="AI Inbox Copilot API", version="0.10.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.frontend_origins),
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
         expose_headers=["X-Request-ID"],
+    )
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.session_secret_for_runtime(),
+        session_cookie="inbox_copilot_session",
+        max_age=7 * 24 * 60 * 60,
+        same_site="none" if settings.app_env == "production" else "lax",
+        https_only=settings.app_env == "production",
     )
 
     @app.middleware("http")
@@ -86,6 +96,7 @@ def create_app() -> FastAPI:
         )
         return response
     app.include_router(analyze_router)
+    app.include_router(auth_router)
     app.include_router(gmail_router)
     app.include_router(emails_router)
     app.include_router(tasks_router)

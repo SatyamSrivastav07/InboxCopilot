@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://localhost:8000/api/gmail/callback"
     gmail_token_file: Path = Path("token.json")
     token_encryption_key: str | None = None
+    session_secret: str | None = None
     database_url: str | None = None
     chroma_persist_directory: Path = Path("data/chromadb")
     chroma_collection_name: str = "inbox_emails"
@@ -113,6 +114,16 @@ class Settings(BaseSettings):
             )
         return self.token_encryption_key
 
+    def session_secret_for_runtime(self) -> str:
+        """Return the cookie-signing secret without making local setup brittle."""
+        if self.session_secret:
+            return self.session_secret
+        if self.app_env == "production":
+            raise ConfigurationError(
+                "SESSION_SECRET is not configured. Set a long random secret before enabling user sessions."
+            )
+        return "development-only-session-secret-change-before-deploy"
+
     def validate_production_requirements(self) -> None:
         if self.app_env != "production":
             return
@@ -120,6 +131,7 @@ class Settings(BaseSettings):
         self.require_mistral_api_key()
         self.require_google_oauth()
         self.require_token_encryption_key()
+        self.session_secret_for_runtime()
         if "*" in self.frontend_origins:
             raise ConfigurationError("FRONTEND_ORIGINS cannot use wildcard origins in production.")
         if not self.frontend_url.startswith("https://"):

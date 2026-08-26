@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 const tabClass = ({ isActive }) =>
   `rounded-lg px-3 py-2 text-sm font-semibold transition ${
@@ -8,6 +9,8 @@ const tabClass = ({ isActive }) =>
   }`
 
 export default function AppHeader() {
+  const { session, signOut } = useAuth()
+  const user = session?.user
   return (
     <header className="border-b bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-col gap-5 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
@@ -27,6 +30,7 @@ export default function AppHeader() {
           <NavLink className={tabClass} to="/gmail">Gmail Inbox</NavLink>
           <NavLink className={tabClass} to="/assistant">AI Assistant</NavLink>
         </nav>
+        {user && <div className="flex items-center gap-2 text-sm"><span className="max-w-40 truncate text-slate-500">{user.email || user.display_name}</span><button className="rounded-lg border px-3 py-2 font-semibold text-slate-600 hover:bg-slate-50" type="button" onClick={() => signOut().catch(() => {})}>Sign out</button></div>}
       </div>
     </header>
   )

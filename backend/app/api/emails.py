@@ -2,6 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from app.auth.dependencies import CurrentUser
+from app.cache.keys import email_reprocess_lock_key
 from app.schemas.email import EmailCategory, Priority
 from app.schemas.persistence import PersistedEmail
 from app.schemas.jobs import JobQueued
@@ -15,6 +17,7 @@ router = APIRouter(prefix="/api/emails", tags=["persisted-emails"])
 
 @router.get("", response_model=list[PersistedEmail])
 def list_emails(
+    _user: CurrentUser,
     service: Annotated[InboxQueryService, Depends(get_inbox_query_service)],
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
@@ -34,6 +37,7 @@ def list_emails(
 @router.get("/{email_id}", response_model=PersistedEmail)
 def get_email(
     email_id: int,
+    _user: CurrentUser,
     service: Annotated[InboxQueryService, Depends(get_inbox_query_service)],
 ) -> PersistedEmail:
     return service.get_email(email_id)
@@ -43,13 +47,15 @@ def get_email(
 def reprocess_email(
     email_id: int,
     request: Request,
+    user: CurrentUser,
     service: Annotated[InboxQueryService, Depends(get_inbox_query_service)],
     jobs: Annotated[JobService, Depends(get_job_service)],
 ) -> JobQueued:
     service.get_email(email_id)
     return jobs.enqueue(
         "app.workers.gmail_tasks.reprocess_email",
-        kwargs={"email_id": email_id},
-        lock_key=f"lock:email-reprocess:{email_id}",
+        kwargs={"user_id": user.id, "email_id": email_id},
+        lock_key=email_reprocess_lock_key(user.id, email_id),
+        user_id=user.id,
         request_id=getattr(request.state, "request_id", None),
     )

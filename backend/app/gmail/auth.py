@@ -18,7 +18,8 @@ from app.gmail.errors import GmailNotConnectedError, GmailOAuthError
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
-GMAIL_SCOPES = [GMAIL_READONLY_SCOPE, GMAIL_SEND_SCOPE]
+GOOGLE_IDENTITY_SCOPES = ["openid", "email", "profile"]
+GMAIL_SCOPES = [*GOOGLE_IDENTITY_SCOPES, GMAIL_READONLY_SCOPE, GMAIL_SEND_SCOPE]
 OAUTH_STATE_TTL_SECONDS = 10 * 60
 logger = logging.getLogger(__name__)
 

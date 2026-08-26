@@ -25,9 +25,10 @@ def retrieved():
 
 
 class StubRetriever:
-    def search(self, query, *, top_k, filters=None):
+    def search(self, query, *, top_k, filters=None, user_id=None):
         assert query == "production release"
         assert top_k == 4
+        assert user_id == 1
         return [retrieved()]
 
 

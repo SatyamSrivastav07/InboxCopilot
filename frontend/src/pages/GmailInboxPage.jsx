@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthContext.jsx'
 import GmailEmailCard from '../components/GmailEmailCard.jsx'
 import GmailEmailDetails from '../components/GmailEmailDetails.jsx'
 import { getGmailAuthUrl, getGmailStatus, getJobStatus, getPersistedEmails, syncGmailInbox } from '../services/api.js'
@@ -36,6 +37,7 @@ function persistedToSyncItem(email) {
 }
 
 export default function GmailInboxPage() {
+  const { session, loading: sessionLoading, refreshSession } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [gmailStatus, setGmailStatus] = useState(null)
   const [limit, setLimit] = useState(10)
@@ -51,6 +53,7 @@ export default function GmailInboxPage() {
   const callbackReason = searchParams.get('reason')
 
   useEffect(() => {
+    if (!session?.authenticated) return undefined
     let active = true
     getGmailStatus()
       .then((status) => active && setGmailStatus(status))
@@ -61,7 +64,7 @@ export default function GmailInboxPage() {
         }
       })
     return () => { active = false }
-  }, [])
+  }, [session?.authenticated])
 
   useEffect(() => {
     if (!syncJob?.job_id || !['queued', 'running'].includes(syncJob.status)) return undefined
@@ -115,6 +118,10 @@ export default function GmailInboxPage() {
     }
   }
 
+  useEffect(() => {
+    if (callbackStatus === 'connected') refreshSession().catch(() => {})
+  }, [callbackStatus])
+
   const sync = async () => {
     setIsSyncing(true)
     setError('')
@@ -145,15 +152,17 @@ export default function GmailInboxPage() {
             <div className="mt-3 flex items-center gap-2 text-sm">
               <span className={`h-2.5 w-2.5 rounded-full ${gmailStatus?.connected ? 'bg-emerald-500' : gmailStatus?.connected === false ? 'bg-slate-300' : 'animate-pulse bg-amber-400'}`} />
               <span className="text-slate-600">
-                {gmailStatus?.connected
+                {!session?.authenticated
+                  ? 'Sign in to securely connect your Gmail'
+                  : gmailStatus?.connected
                   ? `Gmail connected — ${gmailStatus.can_send ? 'read + send' : 'read-only'}`
                   : gmailStatus?.connected === false ? 'Gmail not connected' : 'Checking connection…'}
               </span>
             </div>
           </div>
-          {gmailStatus?.connected === false && (
+          {!sessionLoading && (!session?.authenticated || gmailStatus?.connected === false) && (
             <button className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-indigo-400" type="button" onClick={connect} disabled={isConnecting}>
-              {isConnecting ? 'Opening Google…' : 'Connect Gmail'}
+              {isConnecting ? 'Opening Google…' : session?.authenticated ? 'Connect Gmail' : 'Sign in with Google'}
             </button>
           )}
         </div>

@@ -19,3 +19,7 @@ def gmail_sync_lock_key(user_id: int) -> str:
 
 def inbox_reindex_lock_key(user_id: int) -> str:
     return f"lock:inbox-reindex:user:{user_id}"
+
+
+def email_reprocess_lock_key(user_id: int, email_id: int) -> str:
+    return f"lock:email-reprocess:user:{user_id}:email:{email_id}"

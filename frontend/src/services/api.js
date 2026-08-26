@@ -7,6 +7,7 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 const api = axios.create({
   baseURL: apiBaseUrl,
   timeout: 60_000,
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -43,13 +44,35 @@ export async function getGmailStatus() {
   }
 }
 
-export async function getGmailAuthUrl() {
+export async function getAuthSession() {
   try {
-    const { data } = await api.get('/api/gmail/auth-url')
+    const { data } = await api.get('/api/auth/session')
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not check your sign-in session.')
+  }
+}
+
+export async function getGoogleAuthUrl() {
+  try {
+    const { data } = await api.get('/api/auth/google')
     return data.authorization_url
   } catch (error) {
-    throw apiError(error, 'Could not start Gmail authorization.')
+    throw apiError(error, 'Could not start Google sign-in.')
   }
+}
+
+export async function logout() {
+  try {
+    const { data } = await api.post('/api/auth/logout')
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not sign out.')
+  }
+}
+
+export async function getGmailAuthUrl() {
+  return getGoogleAuthUrl()
 }
 
 export async function syncGmailInbox(options) {

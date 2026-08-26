@@ -162,7 +162,11 @@ def test_sync_queues_background_job_instead_of_blocking():
     assert response.status_code == 202
     assert response.json() == {"job_id": "queued-job", "status": "queued", "reused": False}
     assert jobs.calls[0][0] == "app.workers.gmail_tasks.sync_gmail"
-    assert jobs.calls[0][1]["kwargs"] == {"limit": 5, "unread_only": True}
+    assert jobs.calls[0][1]["kwargs"] == {
+        "user_id": 1,
+        "limit": 5,
+        "unread_only": True,
+    }
 
 
 def test_sync_rejects_unbounded_limit(override_db):

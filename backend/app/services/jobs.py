@@ -27,6 +27,10 @@ def _queued_timestamp_key(job_id: str) -> str:
     return f"job:queued-at:{job_id}"
 
 
+def _owner_key(job_id: str) -> str:
+    return f"job:owner:{job_id}"
+
+
 class JobService:
     def __init__(self, celery: Celery, redis: Redis) -> None:
         self.celery = celery
@@ -39,6 +43,7 @@ class JobService:
         kwargs: dict[str, object] | None = None,
         lock_key: str | None = None,
         request_id: str | None = None,
+        user_id: int | None = None,
     ) -> JobQueued:
         try:
             if lock_key:
@@ -62,6 +67,8 @@ class JobService:
             try:
                 self.redis.setex(f"job:known:{job_id}", JOB_KNOWN_TTL_SECONDS, "1")
                 self.redis.setex(_queued_timestamp_key(job_id), JOB_KNOWN_TTL_SECONDS, str(time()))
+                if user_id is not None:
+                    self.redis.setex(_owner_key(job_id), JOB_KNOWN_TTL_SECONDS, str(user_id))
                 self.celery.send_task(
                     task_name,
                     kwargs=kwargs or {},
@@ -69,7 +76,9 @@ class JobService:
                     headers={"request_id": request_id or ""},
                 )
             except Exception:
-                self.redis.delete(f"job:known:{job_id}", _queued_timestamp_key(job_id))
+                self.redis.delete(
+                    f"job:known:{job_id}", _queued_timestamp_key(job_id), _owner_key(job_id)
+                )
                 if lock_key:
                     self._release_owned_lock(lock_key, job_id)
                 raise
@@ -83,7 +92,14 @@ class JobService:
         except Exception as exc:
             raise JobQueueUnavailableError("The background job could not be queued.") from exc
 
-    def status(self, job_id: str) -> JobState:
+    def status(self, job_id: str, *, user_id: int | None = None) -> JobState:
+        if user_id is not None:
+            try:
+                owner_id = self.redis.get(_owner_key(job_id))
+            except RedisError as exc:
+                raise JobQueueUnavailableError("The job status service is unavailable.") from exc
+            if owner_id != str(user_id):
+                raise JobNotFoundError("Background job was not found or has expired.")
         try:
             result = self.celery.AsyncResult(job_id)
             state = result.state
@@ -146,4 +162,6 @@ class JobService:
 
     def _discard_stale_job(self, lock_key: str, job_id: str) -> None:
         """Release a job that never reached a worker, including pre-upgrade jobs."""
-        self.redis.delete(lock_key, f"job:known:{job_id}", _queued_timestamp_key(job_id))
+        self.redis.delete(
+            lock_key, f"job:known:{job_id}", _queued_timestamp_key(job_id), _owner_key(job_id)
+        )

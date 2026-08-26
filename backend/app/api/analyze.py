@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.auth.dependencies import CurrentUser
 from app.config import ConfigurationError
 from app.core.metrics import log_timing
 from app.genai.analyzer import EmailAnalyzer, get_email_analyzer
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api", tags=["email-analysis"])
 @router.post("/analyze-email", response_model=EmailAnalysis)
 def analyze_email(
     email: EmailInput,
+    _user: CurrentUser,
     analyzer: Annotated[EmailAnalyzer, Depends(get_email_analyzer)],
 ) -> EmailAnalysis:
     try:

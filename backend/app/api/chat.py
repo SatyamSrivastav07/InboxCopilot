@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends
 
+from app.auth.dependencies import CurrentUser
 from app.genai.inbox_workflow import InboxQueryWorkflow
 from app.schemas.query import RoutedInboxRequest, RoutedInboxResponse
 from app.services.dependencies import get_inbox_query_workflow
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/api/chat", tags=["inbox-chat"])
 @router.post("/inbox", response_model=RoutedInboxResponse)
 def ask_inbox(
     request: RoutedInboxRequest,
+    _user: CurrentUser,
     workflow: Annotated[InboxQueryWorkflow, Depends(get_inbox_query_workflow)],
 ) -> RoutedInboxResponse:
     with log_timing(logger, "inbox_query_workflow"):

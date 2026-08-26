@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from redis.exceptions import RedisError
 
+from app.auth.dependencies import CurrentUser
 from app.cache.dependencies import get_cache_service
 from app.cache.service import CacheService
 from app.schemas.email import Priority
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 @router.get("", response_model=list[PersistedTask])
 def list_tasks(
+    _user: CurrentUser,
     service: Annotated[InboxQueryService, Depends(get_inbox_query_service)],
     completed: bool | None = Query(default=None),
     priority: Priority | None = Query(default=None),
@@ -36,12 +38,13 @@ def list_tasks(
 def update_task(
     task_id: int,
     update: TaskUpdate,
+    user: CurrentUser,
     service: Annotated[InboxQueryService, Depends(get_inbox_query_service)],
     cache: Annotated[CacheService, Depends(get_cache_service)],
 ) -> PersistedTask:
     result = service.update_task(task_id, update.completed)
     try:
-        cache.invalidate_inbox_summaries()
+        cache.invalidate_inbox_summaries(user.id)
     except RedisError:
         pass
     return result

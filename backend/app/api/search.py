@@ -3,6 +3,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 
+from app.auth.dependencies import CurrentUser
+from app.cache.keys import inbox_reindex_lock_key
 from app.schemas.search import (
     SemanticSearchRequest,
     SemanticSearchResponse,
@@ -21,12 +23,13 @@ router = APIRouter(prefix="/api/search", tags=["semantic-search"])
 @router.post("/semantic", response_model=SemanticSearchResponse)
 def semantic_search(
     request: SemanticSearchRequest,
+    user: CurrentUser,
     retriever: Annotated[VectorRetriever, Depends(get_vector_retriever)],
 ) -> SemanticSearchResponse:
     logger.info("Semantic search requested with top_k=%s", request.top_k)
     with log_timing(logger, "semantic_retrieval", top_k=request.top_k):
         results = retriever.search(
-            request.query, top_k=request.top_k, filters=request.filters
+            request.query, top_k=request.top_k, filters=request.filters, user_id=user.id
         )
     return SemanticSearchResponse(results=[item.to_schema() for item in results])
 
@@ -34,10 +37,13 @@ def semantic_search(
 @router.post("/reindex", response_model=JobQueued, status_code=202)
 def reindex(
     request: Request,
+    user: CurrentUser,
     jobs: Annotated[JobService, Depends(get_job_service)],
 ) -> JobQueued:
     return jobs.enqueue(
         "app.workers.indexing_tasks.reindex_inbox",
-        lock_key="lock:inbox-reindex",
+        kwargs={"user_id": user.id},
+        lock_key=inbox_reindex_lock_key(user.id),
+        user_id=user.id,
         request_id=getattr(request.state, "request_id", None),
     )

@@ -38,4 +38,4 @@ FastAPI queues JSON-safe IDs/parameters to Celery through Redis. Each worker cre
 
 ## How the system could scale
 
-Phase 9 adds encrypted per-user OAuth credential storage, row ownership, and user-filtered vectors. The next step is Google sign-in/session enforcement, followed by managed Postgres/Redis/vector infrastructure, worker autoscaling, observability, and managed HTTPS.
+Phase 10 adds Google sign-in/session enforcement. The OAuth state and PKCE verifier are bound to the signed browser session; encrypted OAuth credentials are stored per user, and every inbox API, job, dashboard cache, and vector lookup is scoped to that user. Next: managed Postgres/Redis/vector infrastructure, worker autoscaling, observability, HTTPS/custom-domain cookie validation, and Google OAuth verification.

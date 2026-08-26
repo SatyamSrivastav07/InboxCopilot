@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import CurrentUser
 from app.config import get_settings
 from app.database.dependencies import get_db
 from app.genai.analyzer import EmailAnalyzer, get_email_analyzer
@@ -21,30 +22,34 @@ from app.services.reindex import ReindexService
 from app.services.reply_service import ReplyService
 from app.services.structured_query_service import StructuredQueryService
 from app.services.thread_context_service import ThreadContextService
-from app.vectorstore.dependencies import get_inbox_rag, get_vector_indexer
+from app.vectorstore.dependencies import get_vector_indexer, get_vector_retriever
 from app.vectorstore.indexer import VectorIndexer
+from app.vectorstore.retriever import VectorRetriever
 
 
 def get_inbox_query_service(
     db: Annotated[Session, Depends(get_db)],
+    user: CurrentUser,
 ) -> InboxQueryService:
-    return InboxQueryService(db)
+    return InboxQueryService(db, user.id)
 
 
 def get_gmail_sync_service(
     db: Annotated[Session, Depends(get_db)],
+    user: CurrentUser,
     fetcher: Annotated[GmailFetcher, Depends(get_gmail_fetcher)],
     analyzer: Annotated[EmailAnalyzer, Depends(get_email_analyzer)],
     indexer: Annotated[VectorIndexer, Depends(get_vector_indexer)],
 ) -> GmailSyncService:
-    return GmailSyncService(fetcher, analyzer, EmailPersistenceService(db), indexer)
+    return GmailSyncService(fetcher, analyzer, EmailPersistenceService(db, user.id), indexer)
 
 
 def get_reindex_service(
     db: Annotated[Session, Depends(get_db)],
+    user: CurrentUser,
     indexer: Annotated[VectorIndexer, Depends(get_vector_indexer)],
 ) -> ReindexService:
-    return ReindexService(db, indexer)
+    return ReindexService(db, indexer, user.id)
 
 
 @lru_cache
@@ -59,6 +64,7 @@ def get_reply_draft_generator() -> ReplyDraftGenerator:
 
 def get_reply_service(
     db: Annotated[Session, Depends(get_db)],
+    user: CurrentUser,
     fetcher: Annotated[GmailFetcher, Depends(get_gmail_fetcher)],
     sender: Annotated[GmailSender, Depends(get_gmail_sender)],
     generator: Annotated[
@@ -67,22 +73,24 @@ def get_reply_service(
 ) -> ReplyService:
     return ReplyService(
         db,
-        ThreadContextService(db, fetcher, get_settings()),
+        ThreadContextService(db, fetcher, get_settings(), user.id),
         generator,
         sender,
+        user.id,
     )
 
 
 def get_inbox_query_workflow(
     db: Annotated[Session, Depends(get_db)],
-    rag: Annotated[InboxRAG, Depends(get_inbox_rag)],
+    user: CurrentUser,
+    retriever: Annotated[VectorRetriever, Depends(get_vector_retriever)],
     router: Annotated[QueryRouter, Depends(get_query_router)],
     reply_service: Annotated[ReplyService, Depends(get_reply_service)],
 ) -> InboxQueryWorkflow:
     return InboxQueryWorkflow(
         router,
-        StructuredQueryService(db),
-        rag,
+        StructuredQueryService(db, user.id),
+        InboxRAG(retriever, get_settings(), user_id=user.id),
         get_settings(),
         reply_service=reply_service,
     )

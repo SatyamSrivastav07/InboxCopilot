@@ -160,6 +160,7 @@ def test_job_status_endpoint_reports_progress():
     redis = FakeRedis()
     celery = FakeCelery()
     redis.setex("job:known:abc", 60, "1")
+    redis.setex("job:owner:abc", 60, "1")
     celery.results["abc"] = FakeAsyncResult(
         state="STARTED",
         info={"progress": {"total": 20, "processed": 8, "failed": 1}},

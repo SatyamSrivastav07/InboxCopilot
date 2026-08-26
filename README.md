@@ -139,6 +139,7 @@ On Windows, keep the worker command's `--pool=solo`; the Docker worker runs on L
 - `.env`, OAuth credentials, tokens, Chroma data, and logs are ignored by Git.
 - Frontend requests use same-origin `/api` in Docker/Nginx and `http://localhost:8000` by default in Vite development.
 - `TOKEN_ENCRYPTION_KEY` must be one stable Fernet key in every production environment. Generate it once with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`, store it only in your secret manager, and do not rotate it without a credential migration.
+- `SESSION_SECRET` signs the HTTP-only login cookie. Generate a distinct long random value (for example, `python -c "import secrets; print(secrets.token_urlsafe(48))"`) and keep it stable for the deployment. Changing it signs every user out.
 
 ## Gmail, reliability, and recovery
 
@@ -162,7 +163,7 @@ This repository includes `render.yaml` for a small Render deployment. It creates
 
 1. Deploy the Vite frontend on Vercel first: import this GitHub repo, set **Root Directory** to `frontend`, and deploy. Copy its HTTPS URL.
 2. In Render, select **New > Blueprint**, connect the same repository, and choose `render.yaml`. Use a paid plan: the persistent disk and background processing need it.
-3. In Render's secret prompt, set `MISTRAL_API_KEY`, Google OAuth values, one persistent `TOKEN_ENCRYPTION_KEY`, and:
+3. In Render's secret prompt, set `MISTRAL_API_KEY`, Google OAuth values, one persistent `TOKEN_ENCRYPTION_KEY`, one persistent `SESSION_SECRET`, and:
 
    ```text
    FRONTEND_ORIGINS=https://your-vercel-app.vercel.app
@@ -178,7 +179,7 @@ This repository includes `render.yaml` for a small Render deployment. It creates
    Add the same URL in Google Cloud Console under Authorized redirect URIs.
 5. In Vercel, add production environment variable `VITE_API_BASE_URL` with the Render API URL (without a trailing slash), then redeploy the frontend.
 
-Phase 9 adds the database foundation for isolated accounts and encrypted per-user OAuth credentials, but the current browser flow still uses the legacy local connection. Do not advertise the current deployment as a public multi-user product until Phase 10 enables authenticated Google sign-in and per-user sync.
+Phase 10 enables authenticated Google sign-in, encrypted credentials per account, user-scoped inbox APIs, background jobs, dashboard caches, and semantic retrieval. The browser will first show **Sign in with Google**, then users can sync only their own Gmail inbox.
 
 ## Phase 9 — multi-user data foundation
 
@@ -236,4 +237,4 @@ Offline fixtures use synthetic `@example.test` mail and mock model/retrieval beh
 - [Interview guide](docs/INTERVIEW_GUIDE.md)
 - [Current limitations](docs/LIMITATIONS.md)
 
-Phase 9 is complete: the project has multi-user data ownership and encrypted connection storage. Phase 10 will add browser authentication, per-user Gmail OAuth callbacks, and user-scoped API/session enforcement before public multi-user launch.
+Phase 10 is complete: browser authentication, per-user Gmail OAuth callbacks, and user-scoped API/session enforcement are implemented. Before a public launch, configure production secrets, deploy the frontend/backend, and complete Google's verification requirements for Gmail restricted scopes.
