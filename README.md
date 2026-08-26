@@ -132,7 +132,7 @@ On Windows, keep the worker command's `--pool=solo`; the Docker worker runs on L
 
 ## Configuration and security
 
-`backend/app/config.py` centralizes configuration through Pydantic Settings. In `APP_ENV=production`, startup fails if database, Mistral, OAuth, token encryption, HTTPS frontend URL, or restrictive CORS requirements are missing. The API has request IDs, structured request logs, a request-size limit, typed errors, and health/readiness endpoints.
+`backend/app/config.py` centralizes configuration through Pydantic Settings. In `APP_ENV=production`, startup fails if database, Mistral, OAuth, token encryption, HTTPS frontend URL, or restrictive CORS requirements are missing. The API has request IDs, structured request logs, a request-size limit, typed errors, health/readiness endpoints, no-cache API responses, and browser security headers.
 
 - `backend/.env.example` is for direct backend development.
 - Root `.env.example` is for Docker Compose.

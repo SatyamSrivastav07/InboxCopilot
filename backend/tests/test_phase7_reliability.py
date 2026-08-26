@@ -289,8 +289,19 @@ def test_health_and_readiness_check_database_and_redis(monkeypatch):
     readiness = client.get("/health/ready")
     assert health.status_code == 200
     assert health.headers["x-request-id"]
+    assert health.headers["x-content-type-options"] == "nosniff"
+    assert health.headers["x-frame-options"] == "DENY"
+    assert health.headers["referrer-policy"] == "strict-origin-when-cross-origin"
     assert readiness.status_code == 200
     assert readiness.json() == {
         "status": "ready",
         "dependencies": {"postgresql": "ok", "redis": "ok"},
     }
+
+
+def test_api_responses_do_not_allow_browser_or_proxy_caching(override_db):
+    app.dependency_overrides[get_db] = override_db
+    response = TestClient(app).get("/api/auth/session")
+
+    assert response.headers["cache-control"] == "no-store, max-age=0"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"

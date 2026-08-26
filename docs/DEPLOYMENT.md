@@ -37,7 +37,7 @@ The Render start script supervises Celery: if a worker exits it is restarted, wh
 3. Do not set `VITE_API_BASE_URL` for this Vercel deployment. Production defaults to the included same-origin proxy.
 4. Deploy and copy the final HTTPS Vercel URL into the Render values in step 1, then redeploy both services.
 
-The Vercel function forwards `/api/*` to Render without changing the URL shown to the browser. It forwards secure session cookies as first-party Vercel cookies, avoiding third-party-cookie restrictions.
+The Vercel function forwards `/api/*` to Render without changing the URL shown to the browser. It forwards secure session cookies as first-party Vercel cookies, avoiding third-party-cookie restrictions. The API uses `SameSite=Lax` secure cookies in production; do not bypass the proxy with a browser-facing `VITE_API_BASE_URL` pointed at Render.
 
 ## 3. Configure Google OAuth
 
@@ -81,3 +81,4 @@ Users can remove saved Gmail credentials from **Gmail Inbox → Your data contro
 - The Render blueprint intentionally co-locates API and worker because a single persistent Chroma disk cannot be shared by independent Render services. Move semantic indexing to managed vector storage before horizontally scaling workers.
 - PostgreSQL is the durable product data source. Chroma can be rebuilt by running a user-scoped reindex.
 - Google verification is not automated by this repository. Until it is approved, only configured test users can complete the Gmail OAuth flow.
+- API responses set no-cache and browser security headers. HTTPS responses also set HSTS in production.

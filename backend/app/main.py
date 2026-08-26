@@ -51,7 +51,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     settings.validate_production_requirements()
     configure_logging(settings.log_level)
-    app = FastAPI(title="AI Inbox Copilot API", version="0.10.0")
+    app = FastAPI(title="AI Inbox Copilot API", version="0.15.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.frontend_origins),
@@ -65,9 +65,25 @@ def create_app() -> FastAPI:
         secret_key=settings.session_secret_for_runtime(),
         session_cookie="inbox_copilot_session",
         max_age=7 * 24 * 60 * 60,
-        same_site="none" if settings.app_env == "production" else "lax",
+        # Production browser requests go through the Vercel same-origin proxy.
+        # Lax protects state-changing endpoints from cross-site form requests,
+        # while still allowing Google's top-level OAuth callback navigation.
+        same_site="lax",
         https_only=settings.app_env == "production",
     )
+
+    def add_security_headers(response: JSONResponse, request: Request) -> JSONResponse:
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if request.url.path.startswith("/api/"):
+            response.headers.setdefault("Cache-Control", "no-store, max-age=0")
+        if settings.app_env == "production":
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
 
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):
@@ -80,14 +96,18 @@ def create_app() -> FastAPI:
             except ValueError:
                 is_too_large = False
             if is_too_large:
-                return error_response(
+                return add_security_headers(
+                    error_response(
+                        request,
+                        413,
+                        "REQUEST_TOO_LARGE",
+                        "Request body exceeds the configured size limit.",
+                    ),
                     request,
-                    413,
-                    "REQUEST_TOO_LARGE",
-                    "Request body exceeds the configured size limit.",
                 )
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
+        add_security_headers(response, request)
         logger.info(
             "event=http_request request_id=%s method=%s path=%s status=%s",
             request_id,
