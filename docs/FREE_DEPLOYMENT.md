@@ -48,13 +48,7 @@ GitHub or in a `VITE_*` variable.
 
 ## Finish the connection
 
-1. In Vercel, set the server-only environment variable:
-
-   ```text
-   BACKEND_ORIGIN=https://YOUR_RENDER_DOMAIN
-   ```
-
-   Redeploy Vercel after saving it.
+1. Check that the `/api/*` rewrite destination in `frontend/vercel.json` matches your public Render API URL, then deploy or redeploy Vercel. Do not set `VITE_API_BASE_URL`.
 2. In Google Cloud OAuth credentials, add this exact redirect URI:
 
    ```text

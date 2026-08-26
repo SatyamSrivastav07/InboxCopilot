@@ -12,6 +12,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://ai-inbox-copilot-api.onrender.com/api/:path*"
+    },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

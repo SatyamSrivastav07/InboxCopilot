@@ -27,17 +27,11 @@ Free mode runs a small user-requested Gmail sync inside the API request, so no C
 ## 2. Deploy the frontend on Vercel
 
 1. Import the same GitHub repository, with **Root Directory** set to `frontend`.
-2. Add one server-only Vercel environment variable:
-
-   ```text
-   BACKEND_ORIGIN=https://YOUR_RENDER_DOMAIN
-   ```
-
-   Do **not** name it `VITE_BACKEND_ORIGIN`; values beginning with `VITE_` are built into client-side JavaScript.
-3. Do not set `VITE_API_BASE_URL` for this Vercel deployment. Production defaults to the included same-origin proxy.
+2. Do not set `VITE_API_BASE_URL` for this Vercel deployment. Production uses the checked-in same-origin `/api/*` rewrite.
+3. The rewrite destination in `frontend/vercel.json` must match your public Render API URL. Update it before deployment if you use a different Render service domain.
 4. Deploy and copy the final HTTPS Vercel URL into the Render values in step 1, then redeploy both services.
 
-The Vercel function forwards `/api/*` to Render without changing the URL shown to the browser. It forwards secure session cookies as first-party Vercel cookies, avoiding third-party-cookie restrictions. The API uses `SameSite=Lax` secure cookies in production; do not bypass the proxy with a browser-facing `VITE_API_BASE_URL` pointed at Render.
+The Vercel rewrite forwards `/api/*` to Render without changing the URL shown to the browser. This keeps secure session cookies first-party and avoids third-party-cookie restrictions. The API uses `SameSite=Lax` secure cookies in production; do not bypass the proxy with a browser-facing `VITE_API_BASE_URL` pointed at Render.
 
 ## 3. Configure Google OAuth
 
