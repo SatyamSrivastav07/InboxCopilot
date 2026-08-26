@@ -65,6 +65,28 @@ def test_query_router_validates_route_and_structured_parameters(tmp_path):
     assert query.date_from == date(2026, 8, 26)
 
 
+def test_route_guard_promotes_prioritization_and_mentioned_deadlines_to_hybrid(tmp_path):
+    router = QueryRouter(
+        make_settings(tmp_path),
+        route_chain=RunnableLambda(
+            lambda _: {
+                "route": "structured",
+                "intent": "list_deadlines",
+                "reason": "Initial model decision.",
+                "confidence": 0.8,
+            }
+        ),
+    )
+
+    priority = router.route("What should I prioritize today?")
+    deadlines = router.route("What deadlines are mentioned in my recent emails?")
+
+    assert priority.route == QueryRouteType.HYBRID
+    assert priority.intent == "prioritize_inbox"
+    assert deadlines.route == QueryRouteType.HYBRID
+    assert deadlines.intent == "email_deadline_summary"
+
+
 class FakeRouter:
     def __init__(self, route_type):
         self.route_type = route_type

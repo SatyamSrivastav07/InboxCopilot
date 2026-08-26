@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -170,9 +171,15 @@ class StructuredQueryService:
 
     def _priority_summary(self, query: StructuredQuery) -> StructuredQueryResult:
         counts = self.emails.priority_counts()
-        task_records = self.tasks.list(
-            completed=False, priority="urgent", limit=query.limit
-        ) + self.tasks.list(completed=False, priority="high", limit=query.limit)
+        task_records = self.tasks.list(completed=False, limit=query.limit * 2)
+        priority_rank = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
+        task_records.sort(
+            key=lambda item: (
+                priority_rank.get(item.priority, 4),
+                item.normalized_deadline is None,
+                item.normalized_deadline or date.max,
+            )
+        )
         email_records = self.emails.list(
             limit=query.limit,
             offset=0,

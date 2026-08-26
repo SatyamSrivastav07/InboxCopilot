@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import re
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -8,7 +9,7 @@ from langchain_core.runnables import Runnable
 from langchain_mistralai import ChatMistralAI
 
 from app.config import Settings
-from app.schemas.query import QueryRoute, StructuredQuery
+from app.schemas.query import QueryRoute, QueryRouteType, StructuredQuery
 
 
 class QueryRoutingError(RuntimeError):
@@ -108,11 +109,45 @@ class QueryRouter:
     def route(self, question: str) -> QueryRoute:
         try:
             result = self._get_route_chain().invoke({"question": question})
-            return QueryRoute.model_validate(result)
+            route = QueryRoute.model_validate(result)
+            return self._validate_route(question, route)
         except Exception as exc:
             raise QueryRoutingError(
                 "The inbox question could not be routed. Please try again."
             ) from exc
+
+    @staticmethod
+    def _validate_route(question: str, route: QueryRoute) -> QueryRoute:
+        """Apply small high-signal guards where SQL-only routing loses evidence."""
+        normalized = re.sub(r"\s+", " ", question.lower()).strip()
+        hybrid_rules = (
+            (
+                r"\b(prioriti[sz]e|priority|focus on)\b.*\b(today|now|first|should)\b|"
+                r"\bwhat should i\b.*\b(prioriti[sz]e|do|focus)\b",
+                "prioritize_inbox",
+                "Prioritization needs structured task status plus semantic email context.",
+            ),
+            (
+                r"\b(deadline|deadlines)\b.*\b(mentioned|emails?|messages?|recent)\b|"
+                r"\b(recent|emails?|messages?)\b.*\b(deadline|deadlines)\b",
+                "email_deadline_summary",
+                "Mentioned deadlines may exist in email text as well as structured tasks.",
+            ),
+            (
+                r"\bsummari[sz]e\b.*\b(urgent|important|priority)\b.*\b(tasks?|do|action)\b",
+                "urgent_action_summary",
+                "The request combines structured priority/action data with email meaning.",
+            ),
+        )
+        for pattern, intent, reason in hybrid_rules:
+            if re.search(pattern, normalized):
+                return QueryRoute(
+                    route=QueryRouteType.HYBRID,
+                    intent=intent,
+                    reason=reason,
+                    confidence=max(route.confidence, 0.95),
+                )
+        return route
 
     def structured_query(self, question: str, route: QueryRoute) -> StructuredQuery:
         try:

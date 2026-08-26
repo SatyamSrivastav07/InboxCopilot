@@ -49,7 +49,10 @@ Structured evidence:
 {structured_context}
 
 Semantic email evidence:
-{semantic_context}""",
+{semantic_context}
+
+Semantic evidence status: {semantic_status}
+Only say the explanation is limited to structured data when this status is "missing".""",
         ),
         ("human", "Question: {question}"),
     ]
@@ -261,6 +264,7 @@ class InboxQueryWorkflow:
                     "semantic_context": format_context(semantic)
                     if semantic
                     else "No relevant semantic email evidence was found.",
+                    "semantic_status": "present" if semantic else "missing",
                 }
             )
         except Exception as exc:

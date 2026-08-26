@@ -59,6 +59,8 @@ RunnableParallel(
 
 The synthesis prompt receives only those two evidence sets. Structured facts are authoritative for counts/status/deadlines; semantic evidence explains relevant email context. Returned citations are built from retrieved/database records rather than model output.
 
+Small deterministic route guards correct high-signal cases where an SQL-only answer would discard useful email evidence: inbox prioritization, deadlines explicitly described as "mentioned in emails," and urgent-email action summaries are promoted to the hybrid branch. The LLM still performs the initial classification; the actual workflow still executes through `RunnableBranch`.
+
 The existing endpoint is upgraded in place:
 
 ```http
