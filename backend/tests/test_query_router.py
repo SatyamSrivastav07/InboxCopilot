@@ -279,6 +279,7 @@ def test_assistant_draft_branch_creates_draft_but_never_sends(tmp_path):
 def persisted_email(email_id: int, *, reply_required=True, priority="high"):
     record = EmailRecord(
         id=email_id,
+        user_id=1,
         gmail_message_id=f"gmail-{email_id}",
         gmail_thread_id=f"thread-{email_id}",
         sender="manager@example.com",

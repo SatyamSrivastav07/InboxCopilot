@@ -6,11 +6,13 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.models.email import EmailRecord
+from app.database.repositories.user_scope import resolve_user_id
 
 
 class EmailRepository:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, user_id: int | None = None) -> None:
         self.db = db
+        self.user_id = resolve_user_id(db, user_id)
 
     @staticmethod
     def _with_analysis(query: Select[tuple[EmailRecord]]) -> Select[tuple[EmailRecord]]:
@@ -21,12 +23,17 @@ class EmailRepository:
         )
 
     def get_by_id(self, email_id: int) -> EmailRecord | None:
-        query = self._with_analysis(select(EmailRecord).where(EmailRecord.id == email_id))
+        query = self._with_analysis(
+            select(EmailRecord).where(EmailRecord.id == email_id, EmailRecord.user_id == self.user_id)
+        )
         return self.db.scalar(query)
 
     def get_by_gmail_message_id(self, gmail_message_id: str) -> EmailRecord | None:
         query = self._with_analysis(
-            select(EmailRecord).where(EmailRecord.gmail_message_id == gmail_message_id)
+            select(EmailRecord).where(
+                EmailRecord.gmail_message_id == gmail_message_id,
+                EmailRecord.user_id == self.user_id,
+            )
         )
         return self.db.scalar(query)
 
@@ -41,7 +48,7 @@ class EmailRepository:
         received_from: date | None = None,
         received_to: date | None = None,
     ) -> list[EmailRecord]:
-        query = select(EmailRecord)
+        query = select(EmailRecord).where(EmailRecord.user_id == self.user_id)
         if category is not None:
             query = query.where(EmailRecord.category == category)
         if priority is not None:
@@ -70,7 +77,9 @@ class EmailRepository:
         return record
 
     def count(self) -> int:
-        return self.db.scalar(select(func.count(EmailRecord.id))) or 0
+        return self.db.scalar(
+            select(func.count(EmailRecord.id)).where(EmailRecord.user_id == self.user_id)
+        ) or 0
 
     def count_filtered(
         self,
@@ -81,7 +90,7 @@ class EmailRepository:
         received_from: date | None = None,
         received_to: date | None = None,
     ) -> int:
-        query = select(func.count(EmailRecord.id))
+        query = select(func.count(EmailRecord.id)).where(EmailRecord.user_id == self.user_id)
         if category is not None:
             query = query.where(EmailRecord.category == category)
         if priority is not None:
@@ -102,19 +111,28 @@ class EmailRepository:
 
     def priority_counts(self) -> dict[str, int]:
         rows = self.db.execute(
-            select(EmailRecord.priority, func.count(EmailRecord.id)).group_by(
-                EmailRecord.priority
-            )
+            select(EmailRecord.priority, func.count(EmailRecord.id))
+            .where(EmailRecord.user_id == self.user_id)
+            .group_by(EmailRecord.priority)
         )
         return {str(priority): int(count) for priority, count in rows}
 
     def list_all_for_indexing(self) -> list[EmailRecord]:
-        return list(self.db.scalars(select(EmailRecord).order_by(EmailRecord.id)))
+        return list(
+            self.db.scalars(
+                select(EmailRecord)
+                .where(EmailRecord.user_id == self.user_id)
+                .order_by(EmailRecord.id)
+            )
+        )
 
     def recent_important(self, limit: int = 5) -> list[EmailRecord]:
         query = self._with_analysis(
             select(EmailRecord)
-            .where(EmailRecord.priority.in_(["urgent", "high"]))
+            .where(
+                EmailRecord.user_id == self.user_id,
+                EmailRecord.priority.in_(["urgent", "high"]),
+            )
             .order_by(EmailRecord.received_at.desc().nullslast(), EmailRecord.id.desc())
             .limit(limit)
         )
@@ -123,12 +141,16 @@ class EmailRepository:
 
     def count_needs_reply(self) -> int:
         return self.db.scalar(
-            select(func.count(EmailRecord.id)).where(EmailRecord.reply_required.is_(True))
+            select(func.count(EmailRecord.id)).where(
+                EmailRecord.user_id == self.user_id,
+                EmailRecord.reply_required.is_(True),
+            )
         ) or 0
 
     def count_high_priority(self) -> int:
         return self.db.scalar(
             select(func.count(EmailRecord.id)).where(
+                EmailRecord.user_id == self.user_id,
                 EmailRecord.priority.in_(["high", "urgent"])
             )
         ) or 0

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database.errors import DatabaseUnavailableError, RecordNotFoundError
 from app.database.models.draft import EmailDraftRecord
 from app.database.repositories.draft_repository import DraftRepository
+from app.database.repositories.user_scope import resolve_user_id
 from app.genai.reply_chain import (
     ReplyDraftGenerator,
     normalize_reply_subject,
@@ -91,9 +92,11 @@ class ReplyService:
         context_service: ThreadContextService,
         generator: ReplyDraftGenerator,
         sender: GmailSender,
+        user_id: int | None = None,
     ) -> None:
         self.db = db
-        self.drafts = DraftRepository(db)
+        self.user_id = resolve_user_id(db, user_id)
+        self.drafts = DraftRepository(db, self.user_id)
         self.context_service = context_service
         self.generator = generator
         self.sender = sender
@@ -109,6 +112,7 @@ class ReplyService:
         )
         notes = list(generated.content.notes) + list(generated.validation.issues)
         draft = EmailDraftRecord(
+            user_id=email.user_id,
             email_id=email.id,
             gmail_message_id=context.gmail_message_id,
             gmail_thread_id=context.gmail_thread_id,

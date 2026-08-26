@@ -79,8 +79,9 @@ class ThreadContextService:
         db: Session,
         fetcher: GmailFetcher,
         settings: Settings,
+        user_id: int | None = None,
     ) -> None:
-        self.emails = EmailRepository(db)
+        self.emails = EmailRepository(db, user_id)
         self.fetcher = fetcher
         self.settings = settings
 

@@ -47,22 +47,24 @@ class RetrievedEmail:
         )
 
 
-def _metadata_filter(filters: SearchFilters | None) -> dict[str, Any] | None:
-    if filters is None:
-        return None
+def _metadata_filter(
+    filters: SearchFilters | None, *, user_id: int | None = None
+) -> dict[str, Any] | None:
     clauses: list[dict[str, Any]] = []
-    if filters.sender:
+    if filters and filters.sender:
         clauses.append({"sender": filters.sender})
-    if filters.category:
+    if filters and filters.category:
         clauses.append({"category": filters.category.value})
-    if filters.priority:
+    if filters and filters.priority:
         clauses.append({"priority": filters.priority.value})
-    if filters.date_from:
+    if filters and filters.date_from:
         start = datetime.combine(filters.date_from, time.min, tzinfo=timezone.utc)
         clauses.append({"received_timestamp": {"$gte": start.timestamp()}})
-    if filters.date_to:
+    if filters and filters.date_to:
         end = datetime.combine(filters.date_to, time.max, tzinfo=timezone.utc)
         clauses.append({"received_timestamp": {"$lte": end.timestamp()}})
+    if user_id is not None:
+        clauses.append({"user_id": user_id})
     if not clauses:
         return None
     return clauses[0] if len(clauses) == 1 else {"$and": clauses}
@@ -79,6 +81,7 @@ class VectorRetriever:
         *,
         top_k: int,
         filters: SearchFilters | None = None,
+        user_id: int | None = None,
     ) -> list[RetrievedEmail]:
         try:
             query_vector = self.embeddings.embed_query(query)
@@ -88,7 +91,7 @@ class VectorRetriever:
         raw = self.store.query(
             query_embedding=query_vector,
             top_k=max(top_k * 3, 10),
-            where=_metadata_filter(filters),
+            where=_metadata_filter(filters, user_id=user_id),
         )
         documents = (raw.get("documents") or [[]])[0]
         metadatas = (raw.get("metadatas") or [[]])[0]
@@ -125,4 +128,3 @@ class VectorRetriever:
 
         logger.info("Semantic query returned %s email results", len(results))
         return results
-

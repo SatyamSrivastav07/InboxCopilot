@@ -37,8 +37,9 @@ def retrieval_text(email: EmailRecord) -> str:
     ).strip()
 
 
-def vector_id(email_id: int, chunk_number: int) -> str:
-    return f"email_{email_id}_chunk_{chunk_number}"
+def vector_id(email_id: int, chunk_number: int, user_id: int | None = None) -> str:
+    prefix = f"user_{user_id}_" if user_id is not None else ""
+    return f"{prefix}email_{email_id}_chunk_{chunk_number}"
 
 
 class VectorIndexer:
@@ -64,6 +65,7 @@ class VectorIndexer:
         received = email.received_at.isoformat() if email.received_at else ""
         received_timestamp = email.received_at.timestamp() if email.received_at else 0.0
         base_metadata: dict[str, Any] = {
+            "user_id": email.user_id,
             "email_id": email.id,
             "gmail_message_id": email.gmail_message_id,
             "gmail_thread_id": email.gmail_thread_id,
@@ -75,7 +77,7 @@ class VectorIndexer:
             "priority": email.priority,
             "content_hash": content_hash,
         }
-        ids = [vector_id(email.id, index) for index in range(len(chunks))]
+        ids = [vector_id(email.id, index, email.user_id) for index in range(len(chunks))]
         metadatas = [
             {**base_metadata, "chunk_number": index}
             for index in range(len(chunks))
@@ -85,7 +87,7 @@ class VectorIndexer:
     def index_email(self, email: EmailRecord, *, force: bool = False) -> IndexResult:
         ids, chunks, metadatas = self.chunks_for_email(email)
         content_hash = metadatas[0]["content_hash"]
-        existing = self.store.get_email_chunks(email.id)
+        existing = self.store.get_email_chunks(email.id, user_id=email.user_id)
         existing_metadata = existing.get("metadatas") or []
         if (
             not force
@@ -97,7 +99,7 @@ class VectorIndexer:
             return IndexResult(email_id=email.id, chunks_created=0, skipped=True)
 
         if existing.get("ids"):
-            self.store.delete_email(email.id)
+            self.store.delete_email(email.id, user_id=email.user_id)
         try:
             vectors = self.embeddings.embed_documents(chunks)
         except Exception as exc:
@@ -111,6 +113,5 @@ class VectorIndexer:
     def reindex_email(self, email: EmailRecord) -> IndexResult:
         return self.index_email(email, force=True)
 
-    def delete_email_vectors(self, email_id: int) -> None:
-        self.store.delete_email(email_id)
-
+    def delete_email_vectors(self, email_id: int, *, user_id: int | None = None) -> None:
+        self.store.delete_email(email_id, user_id=user_id)

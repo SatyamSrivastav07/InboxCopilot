@@ -16,6 +16,9 @@ class EmailDraftRecord(Base):
     __tablename__ = "email_drafts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     email_id: Mapped[int] = mapped_column(
         ForeignKey("emails.id", ondelete="CASCADE"), index=True
     )

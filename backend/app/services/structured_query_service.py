@@ -21,10 +21,10 @@ from app.schemas.query import (
 class StructuredQueryService:
     """Executes a fixed allow-list of repository operations; it never accepts SQL."""
 
-    def __init__(self, db: Session) -> None:
-        self.emails = EmailRepository(db)
-        self.tasks = TaskRepository(db)
-        self.meetings = MeetingRepository(db)
+    def __init__(self, db: Session, user_id: int | None = None) -> None:
+        self.emails = EmailRepository(db, user_id)
+        self.tasks = TaskRepository(db, self.emails.user_id)
+        self.meetings = MeetingRepository(db, self.emails.user_id)
         self._handlers: dict[
             StructuredIntent, Callable[[StructuredQuery], StructuredQueryResult]
         ] = {

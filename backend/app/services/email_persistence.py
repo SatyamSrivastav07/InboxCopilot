@@ -54,9 +54,10 @@ class PersistenceResult:
 
 
 class EmailPersistenceService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, user_id: int | None = None) -> None:
         self.db = db
-        self.emails = EmailRepository(db)
+        self.emails = EmailRepository(db, user_id)
+        self.user_id = self.emails.user_id
 
     def get_by_gmail_message_id(self, message_id: str) -> EmailRecord | None:
         try:
@@ -79,6 +80,7 @@ class EmailPersistenceService:
         if existing:
             return PersistenceResult(email=existing, created=False)
         record = EmailRecord(
+            user_id=self.user_id,
             gmail_message_id=gmail_email.message_id,
             gmail_thread_id=gmail_email.thread_id,
             sender=gmail_email.sender,
@@ -199,6 +201,7 @@ class EmailPersistenceService:
             )
 
         record = EmailRecord(
+            user_id=self.user_id,
             gmail_message_id=gmail_email.message_id,
             gmail_thread_id=gmail_email.thread_id,
             sender=gmail_email.sender,

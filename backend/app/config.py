@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     google_client_secret: str | None = None
     google_redirect_uri: str = "http://localhost:8000/api/gmail/callback"
     gmail_token_file: Path = Path("token.json")
+    token_encryption_key: str | None = None
     database_url: str | None = None
     chroma_persist_directory: Path = Path("data/chromadb")
     chroma_collection_name: str = "inbox_emails"
@@ -105,12 +106,20 @@ class Settings(BaseSettings):
             )
         return self.database_url
 
+    def require_token_encryption_key(self) -> str:
+        if not self.token_encryption_key:
+            raise ConfigurationError(
+                "TOKEN_ENCRYPTION_KEY is not configured. Generate a Fernet key before enabling multi-user Gmail connections."
+            )
+        return self.token_encryption_key
+
     def validate_production_requirements(self) -> None:
         if self.app_env != "production":
             return
         self.require_database_url()
         self.require_mistral_api_key()
         self.require_google_oauth()
+        self.require_token_encryption_key()
         if "*" in self.frontend_origins:
             raise ConfigurationError("FRONTEND_ORIGINS cannot use wildcard origins in production.")
         if not self.frontend_url.startswith("https://"):

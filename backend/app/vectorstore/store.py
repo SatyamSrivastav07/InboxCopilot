@@ -37,10 +37,13 @@ class ChromaStore:
         except Exception as exc:
             raise VectorStoreError("The Chroma collection is unavailable.") from exc
 
-    def get_email_chunks(self, email_id: int) -> dict[str, Any]:
+    def get_email_chunks(self, email_id: int, *, user_id: int | None = None) -> dict[str, Any]:
         try:
+            where: dict[str, Any] = {"email_id": email_id}
+            if user_id is not None:
+                where = {"$and": [where, {"user_id": user_id}]}
             return self.collection.get(
-                where={"email_id": email_id}, include=["metadatas"]
+                where=where, include=["metadatas"]
             )
         except Exception as exc:
             raise VectorStoreError("Could not inspect the email vector index.") from exc
@@ -63,11 +66,20 @@ class ChromaStore:
         except Exception as exc:
             raise VectorStoreError("Could not update the email vector index.") from exc
 
-    def delete_email(self, email_id: int) -> None:
+    def delete_email(self, email_id: int, *, user_id: int | None = None) -> None:
         try:
-            self.collection.delete(where={"email_id": email_id})
+            where: dict[str, Any] = {"email_id": email_id}
+            if user_id is not None:
+                where = {"$and": [where, {"user_id": user_id}]}
+            self.collection.delete(where=where)
         except Exception as exc:
             raise VectorStoreError("Could not delete email vectors.") from exc
+
+    def delete_user(self, user_id: int) -> None:
+        try:
+            self.collection.delete(where={"user_id": user_id})
+        except Exception as exc:
+            raise VectorStoreError("Could not clear the user's email vectors.") from exc
 
     def clear(self) -> None:
         try:

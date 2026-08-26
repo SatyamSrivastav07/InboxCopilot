@@ -46,9 +46,17 @@ def settings(tmp_path, *, chunk_size=1000, chunk_overlap=100) -> Settings:
     )
 
 
-def email(email_id: int, subject: str, body: str, *, thread_id: str | None = None):
+def email(
+    email_id: int,
+    subject: str,
+    body: str,
+    *,
+    thread_id: str | None = None,
+    user_id: int = 1,
+):
     return EmailRecord(
         id=email_id,
+        user_id=user_id,
         gmail_message_id=f"gmail-{email_id}",
         gmail_thread_id=thread_id or f"thread-{email_id}",
         sender="sender@example.com",
@@ -81,8 +89,11 @@ def test_email_is_chunked_with_metadata_and_deterministic_ids(tmp_path):
     stored = store.get_email_chunks(record.id)
 
     assert result.chunks_created > 1
-    assert stored["ids"] == [vector_id(7, index) for index in range(result.chunks_created)]
+    assert stored["ids"] == [
+        vector_id(7, index, user_id=1) for index in range(result.chunks_created)
+    ]
     assert all(metadata["email_id"] == 7 for metadata in stored["metadatas"])
+    assert all(metadata["user_id"] == 1 for metadata in stored["metadatas"])
     assert all(metadata["gmail_thread_id"] == "thread-7" for metadata in stored["metadatas"])
     assert all(metadata["category"] == "action_required" for metadata in stored["metadatas"])
 
@@ -109,6 +120,18 @@ def test_semantic_retrieval_returns_best_email_and_deduplicates_chunks(tmp_path)
     assert results[0].email_id == 1
     assert len([item for item in results if item.email_id == 1]) == 1
     assert results[0].score > results[-1].score
+
+
+def test_semantic_retrieval_never_crosses_user_vector_namespace(tmp_path):
+    _, store, embeddings, indexer = vector_components(tmp_path)
+    indexer.index_email(email(1, "Owner deployment", "deployment release", user_id=1))
+    indexer.index_email(email(1, "Other deployment", "deployment release", user_id=2))
+
+    results = VectorRetriever(store, embeddings).search(
+        "deployment release", top_k=5, user_id=1
+    )
+
+    assert [item.subject for item in results] == ["Owner deployment"]
 
 
 def test_context_and_sources_preserve_email_citations():
@@ -150,10 +173,10 @@ def test_rag_returns_safe_answer_without_calling_model_when_no_results(tmp_path)
 
 class RecordingStore:
     def __init__(self):
-        self.cleared = False
+        self.deleted_users = []
 
-    def clear(self):
-        self.cleared = True
+    def delete_user(self, user_id):
+        self.deleted_users.append(user_id)
 
 
 class RecordingIndexer:
@@ -176,7 +199,7 @@ def test_reindex_rebuilds_vectors_for_every_persisted_email(db_session):
 
     response = ReindexService(db_session, indexer).reindex_all()
 
-    assert indexer.store.cleared is True
+    assert indexer.store.deleted_users == [1]
     assert indexer.email_ids == [11, 12]
     assert response.emails_indexed == 2
     assert response.chunks_created == 4

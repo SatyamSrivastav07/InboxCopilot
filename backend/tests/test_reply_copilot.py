@@ -43,6 +43,7 @@ def make_settings(tmp_path):
 def record(email_id=31, sender="Recruiter <recruiter@example.com>"):
     return EmailRecord(
         id=email_id,
+        user_id=1,
         gmail_message_id=f"gmail-{email_id}",
         gmail_thread_id="thread-interview",
         sender=sender,

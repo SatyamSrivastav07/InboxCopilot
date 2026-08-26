@@ -18,7 +18,7 @@ Email analysis fans out independent classification, summary, task, meeting, and 
 
 ## How duplicate processing is prevented
 
-`gmail_message_id` is unique in PostgreSQL. A worker reserves a pending row before analysis; overlapping jobs recover safely from the unique constraint. Redis prevents accidental concurrent sync storms, while the database remains the final race guard.
+`(user_id, gmail_message_id)` is unique in PostgreSQL. A worker reserves a pending row before analysis; overlapping jobs for the same user recover safely from the unique constraint, while different users may legitimately have the same Gmail message ID namespace. Redis locks are also namespaced per user for the public flow.
 
 ## How hallucinations are reduced
 
@@ -38,4 +38,4 @@ FastAPI queues JSON-safe IDs/parameters to Celery through Redis. Each worker cre
 
 ## How the system could scale
 
-Move OAuth/token storage to per-user encrypted storage, isolate collections per tenant, use managed Postgres/Redis/vector infrastructure, add worker autoscaling and observability, and place the app behind managed HTTPS. The service boundaries already separate API, workers, persistence, indexing, and integrations.
+Phase 9 adds encrypted per-user OAuth credential storage, row ownership, and user-filtered vectors. The next step is Google sign-in/session enforcement, followed by managed Postgres/Redis/vector infrastructure, worker autoscaling, observability, and managed HTTPS.

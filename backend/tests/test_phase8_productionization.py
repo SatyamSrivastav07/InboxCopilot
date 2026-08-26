@@ -26,6 +26,7 @@ def test_production_configuration_rejects_unsafe_cors(tmp_path):
         google_client_secret="client-secret",
         frontend_origins="*",
         frontend_url="https://app.example.test",
+        token_encryption_key="test-encryption-key",
         gmail_token_file=tmp_path / "token.json",
         chroma_persist_directory=tmp_path / "chroma",
     )
@@ -43,6 +44,7 @@ def test_production_configuration_accepts_complete_safe_values(tmp_path):
         google_client_secret="client-secret",
         frontend_origins="https://app.example.test",
         frontend_url="https://app.example.test",
+        token_encryption_key="test-encryption-key",
         gmail_token_file=tmp_path / "token.json",
         chroma_persist_directory=tmp_path / "chroma",
     )

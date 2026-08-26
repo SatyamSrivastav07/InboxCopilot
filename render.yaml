@@ -55,6 +55,8 @@ services:
       # Values below are entered only in Render's secret prompt/dashboard.
       - key: MISTRAL_API_KEY
         sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET

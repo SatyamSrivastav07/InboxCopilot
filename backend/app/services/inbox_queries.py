@@ -22,11 +22,11 @@ from app.services.mappers import email_response, meeting_response, task_response
 
 
 class InboxQueryService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, user_id: int | None = None) -> None:
         self.db = db
-        self.emails = EmailRepository(db)
-        self.tasks = TaskRepository(db)
-        self.meetings = MeetingRepository(db)
+        self.emails = EmailRepository(db, user_id)
+        self.tasks = TaskRepository(db, self.emails.user_id)
+        self.meetings = MeetingRepository(db, self.emails.user_id)
 
     def _database_error(self, exc: SQLAlchemyError) -> DatabaseUnavailableError:
         return DatabaseUnavailableError(

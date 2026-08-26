@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -13,13 +13,16 @@ if TYPE_CHECKING:
     from app.database.models.entity import EntityRecord
     from app.database.models.meeting import MeetingRecord
     from app.database.models.task import TaskRecord
+    from app.database.models.user import UserRecord
 
 
 class EmailRecord(Base):
     __tablename__ = "emails"
+    __table_args__ = (UniqueConstraint("user_id", "gmail_message_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    gmail_message_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    gmail_message_id: Mapped[str] = mapped_column(String(255), index=True)
     gmail_thread_id: Mapped[str] = mapped_column(String(255), index=True)
     sender: Mapped[str] = mapped_column(Text)
     recipients: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -71,3 +74,4 @@ class EmailRecord(Base):
     drafts: Mapped[list[EmailDraftRecord]] = relationship(
         back_populates="email", cascade="all, delete-orphan", passive_deletes=True
     )
+    user: Mapped[UserRecord] = relationship(back_populates="emails")

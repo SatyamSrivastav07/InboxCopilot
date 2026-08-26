@@ -5,18 +5,22 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.database.models.email import EmailRecord
 from app.database.models.task import TaskRecord
+from app.database.repositories.user_scope import resolve_user_id
 
 
 class TaskRepository:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, user_id: int | None = None) -> None:
         self.db = db
+        self.user_id = resolve_user_id(db, user_id)
 
     def get_by_id(self, task_id: int) -> TaskRecord | None:
         return self.db.scalar(
             select(TaskRecord)
+            .join(TaskRecord.email)
             .options(selectinload(TaskRecord.email))
-            .where(TaskRecord.id == task_id)
+            .where(TaskRecord.id == task_id, EmailRecord.user_id == self.user_id)
         )
 
     def list(
@@ -28,7 +32,12 @@ class TaskRepository:
         deadline_to: date | None = None,
         limit: int | None = None,
     ) -> list[TaskRecord]:
-        query = select(TaskRecord).options(selectinload(TaskRecord.email))
+        query = (
+            select(TaskRecord)
+            .join(TaskRecord.email)
+            .options(selectinload(TaskRecord.email))
+            .where(EmailRecord.user_id == self.user_id)
+        )
         if completed is not None:
             query = query.where(TaskRecord.completed.is_(completed))
         if priority is not None:
@@ -54,7 +63,11 @@ class TaskRepository:
         deadline_from: date | None = None,
         deadline_to: date | None = None,
     ) -> int:
-        query = select(func.count(TaskRecord.id))
+        query = (
+            select(func.count(TaskRecord.id))
+            .join(TaskRecord.email)
+            .where(EmailRecord.user_id == self.user_id)
+        )
         if completed is not None:
             query = query.where(TaskRecord.completed.is_(completed))
         if priority is not None:
@@ -67,14 +80,18 @@ class TaskRepository:
 
     def count_pending(self) -> int:
         return self.db.scalar(
-            select(func.count(TaskRecord.id)).where(TaskRecord.completed.is_(False))
+            select(func.count(TaskRecord.id))
+            .join(TaskRecord.email)
+            .where(EmailRecord.user_id == self.user_id, TaskRecord.completed.is_(False))
         ) or 0
 
     def upcoming_deadlines(self, from_date: date, limit: int = 5) -> list[TaskRecord]:
         query = (
             select(TaskRecord)
+            .join(TaskRecord.email)
             .options(selectinload(TaskRecord.email))
             .where(
+                EmailRecord.user_id == self.user_id,
                 TaskRecord.completed.is_(False),
                 TaskRecord.normalized_deadline.is_not(None),
                 TaskRecord.normalized_deadline >= from_date,

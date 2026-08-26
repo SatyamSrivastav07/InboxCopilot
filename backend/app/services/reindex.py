@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class ReindexService:
-    def __init__(self, db: Session, indexer: VectorIndexer) -> None:
-        self.emails = EmailRepository(db)
+    def __init__(self, db: Session, indexer: VectorIndexer, user_id: int | None = None) -> None:
+        self.emails = EmailRepository(db, user_id)
         self.indexer = indexer
 
     def reindex_all(self) -> ReindexResponse:
@@ -29,7 +29,7 @@ class ReindexService:
             ) from exc
 
         logger.info("Reindexing %s persisted emails", len(emails))
-        self.indexer.store.clear()
+        self.indexer.store.delete_user(self.emails.user_id)
         emails_indexed = 0
         chunks_created = 0
         for email in emails:
@@ -58,7 +58,7 @@ class ReindexService:
         failed_items: list[dict] = []
         if progress_callback:
             progress_callback(total, 0, 0, [])
-        self.indexer.store.clear()
+        self.indexer.store.delete_user(self.emails.user_id)
         for email in emails:
             try:
                 email.vector_status = "pending"
