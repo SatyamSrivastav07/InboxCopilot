@@ -71,6 +71,18 @@ def test_google_oauth_rejects_a_callback_with_the_wrong_state(tmp_path):
         service.exchange_code("unused-code", "wrong-state", browser_session)
 
 
+def test_google_oauth_reports_a_safe_error_type_for_unexpected_exchange_failures(tmp_path, monkeypatch):
+    service = GoogleOAuthService(oauth_settings(tmp_path))
+    browser_session = {}
+    authorization_url = service.authorization_url(browser_session)
+    state = parse_qs(urlparse(authorization_url).query)["state"][0]
+
+    monkeypatch.setattr(service, "_flow", lambda **_kwargs: (_ for _ in ()).throw(ValueError()))
+
+    with pytest.raises(Exception, match="ValueError"):
+        service.exchange_code("unused-code", state, browser_session)
+
+
 def test_google_identity_repository_reuses_the_same_subject(db_session):
     repository = UserRepository(db_session)
     first = repository.get_or_create_google_user(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 import time
 import os
+import logging
 from dataclasses import dataclass
 from typing import Any, MutableMapping
 from urllib.parse import urlparse
@@ -18,6 +19,7 @@ from app.gmail.errors import GmailOAuthError
 
 _USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 _OAUTH_SESSION_KEY = "google_oauth_pending"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -103,8 +105,10 @@ class GoogleOAuthService:
         except GmailOAuthError:
             raise
         except Exception as exc:
+            logger.exception("Google OAuth token exchange failed")
             raise GmailOAuthError(
-                "Google OAuth could not be completed. Check the redirect URI and try again."
+                "Google OAuth could not be completed "
+                f"({exc.__class__.__name__}). Check the backend terminal for details."
             ) from exc
 
     def identity(self, credentials: Credentials) -> GoogleIdentity:
