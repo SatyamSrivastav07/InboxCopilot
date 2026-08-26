@@ -1,0 +1,13 @@
+.env
+credentials.json
+token.json
+oauth_state.json
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+dist/
+.vite/
+coverage/
+backend/data/chromadb/
