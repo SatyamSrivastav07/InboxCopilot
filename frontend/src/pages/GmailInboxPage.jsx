@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -51,6 +51,7 @@ export default function GmailInboxPage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [isRemovingData, setIsRemovingData] = useState(false)
   const [error, setError] = useState('')
+  const automaticSyncStarted = useRef(false)
 
   const callbackStatus = searchParams.get('gmail')
   const callbackReason = searchParams.get('reason')
@@ -125,18 +126,18 @@ export default function GmailInboxPage() {
     if (callbackStatus === 'connected') refreshSession().catch(() => {})
   }, [callbackStatus])
 
-  const sync = async () => {
+  const sync = async ({ requestedLimit = limit, requestedUnreadOnly = unreadOnly } = {}) => {
     setIsSyncing(true)
     setError('')
-    setSyncJob({ status: 'submitting', progress: { total: limit, processed: 0, failed: 0 } })
+    setSyncJob({ status: 'submitting', progress: { total: requestedLimit, processed: 0, failed: 0 } })
     try {
-      const result = await syncGmailInbox({ limit, unread_only: unreadOnly })
+      const result = await syncGmailInbox({ limit: requestedLimit, unread_only: requestedUnreadOnly })
       if (['completed', 'partial_success', 'failed'].includes(result.status)) {
         setSyncJob(result)
         if (result.status === 'failed') {
           setError(result.error || 'Inbox sync failed. You can retry safely.')
         } else {
-          const emails = await getPersistedEmails({ limit, offset: 0 })
+          const emails = await getPersistedEmails({ limit: requestedLimit, offset: 0 })
           setSyncResult({
             count: result.result?.total || emails.length,
             analyzed_count: (result.result?.processed || 0) + (result.result?.cached || 0),
@@ -147,7 +148,7 @@ export default function GmailInboxPage() {
         setIsSyncing(false)
         return
       }
-      setSyncJob({ ...result, progress: { total: limit, processed: 0, failed: 0 } })
+      setSyncJob({ ...result, progress: { total: requestedLimit, processed: 0, failed: 0 } })
     } catch (requestError) {
       setError(requestError.message)
       setIsSyncing(false)
@@ -156,6 +157,12 @@ export default function GmailInboxPage() {
       }
     }
   }
+
+  useEffect(() => {
+    if (automaticSyncStarted.current || callbackStatus !== 'connected' || !session?.authenticated || !gmailStatus?.connected) return
+    automaticSyncStarted.current = true
+    void sync({ requestedLimit: 5, requestedUnreadOnly: false })
+  }, [callbackStatus, gmailStatus?.connected, session?.authenticated])
 
   const clearCallbackNotice = () => {
     setSearchParams({}, { replace: true })
@@ -228,7 +235,7 @@ export default function GmailInboxPage() {
               Unread only
             </label>
             <button className="sm:ml-auto rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-400" type="button" onClick={sync} disabled={isSyncing}>
-              {isSyncing ? `Syncing and analyzing ${limit} emails…` : 'Sync Inbox'}
+              {isSyncing ? `Syncing and analyzing ${syncJob?.progress?.total || limit} emails…` : 'Sync Inbox'}
             </button>
           </div>
         )}
@@ -236,7 +243,7 @@ export default function GmailInboxPage() {
 
       {callbackStatus && (
         <div className={`mt-5 flex items-start justify-between gap-4 rounded-xl border p-4 text-sm ${callbackStatus === 'connected' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`} role="status">
-          <span>{callbackStatus === 'connected' ? 'Gmail connected successfully.' : callbackReason || 'Gmail connection failed.'}</span>
+          <span>{callbackStatus === 'connected' ? 'Gmail connected successfully. Your first 5 emails are syncing automatically.' : callbackReason || 'Gmail connection failed.'}</span>
           <button className="font-bold" type="button" onClick={clearCallbackNotice} aria-label="Dismiss">×</button>
         </div>
       )}
