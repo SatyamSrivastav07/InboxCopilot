@@ -102,7 +102,7 @@ export default function GmailInboxPage() {
       active = false
       window.clearTimeout(timer)
     }
-  }, [syncJob?.job_id, syncJob?.status, limit])
+  }, [syncJob?.job_id, limit])
 
   const connect = async () => {
     setIsConnecting(true)
@@ -118,17 +118,16 @@ export default function GmailInboxPage() {
   const sync = async () => {
     setIsSyncing(true)
     setError('')
-    setSyncResult(null)
+    setSyncJob({ status: 'submitting', progress: { total: limit, processed: 0, failed: 0 } })
     try {
       const queued = await syncGmailInbox({ limit, unread_only: unreadOnly })
       setSyncJob({ ...queued, progress: { total: limit, processed: 0, failed: 0 } })
     } catch (requestError) {
       setError(requestError.message)
+      setIsSyncing(false)
       if (requestError.message.toLowerCase().includes('not connected')) {
         setGmailStatus({ connected: false, can_read: false, can_send: false })
       }
-    } finally {
-      setIsSyncing(false)
     }
   }
 
