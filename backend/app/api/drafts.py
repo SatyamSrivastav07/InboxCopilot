@@ -9,6 +9,7 @@ from app.cache.service import CacheService
 from app.schemas.draft import DraftSendResponse, DraftUpdate, ReplyDraft, ReplyDraftRequest
 from app.services.dependencies import get_reply_service
 from app.services.reply_service import ReplyService
+from app.security.rate_limit_dependencies import limit_reply_generation
 
 router = APIRouter(prefix="/api", tags=["reply-drafts"])
 
@@ -18,6 +19,7 @@ def generate_reply_draft(
     email_id: int,
     request: ReplyDraftRequest,
     _user: CurrentUser,
+    _rate_limit: Annotated[None, Depends(limit_reply_generation)],
     service: Annotated[ReplyService, Depends(get_reply_service)],
 ) -> ReplyDraft:
     return service.generate(email_id, request)

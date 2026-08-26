@@ -9,6 +9,7 @@ from app.auth.dependencies import CurrentUser
 from app.config import ConfigurationError
 from app.core.metrics import log_timing
 from app.genai.analyzer import EmailAnalyzer, get_email_analyzer
+from app.security.rate_limit_dependencies import limit_manual_analysis
 from app.schemas.email import EmailAnalysis, EmailInput
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api", tags=["email-analysis"])
 def analyze_email(
     email: EmailInput,
     _user: CurrentUser,
+    _rate_limit: Annotated[None, Depends(limit_manual_analysis)],
     analyzer: Annotated[EmailAnalyzer, Depends(get_email_analyzer)],
 ) -> EmailAnalysis:
     try:

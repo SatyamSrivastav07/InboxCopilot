@@ -33,6 +33,7 @@ from app.cache.keys import gmail_sync_lock_key
 from app.schemas.jobs import JobQueued
 from app.services.job_dependencies import get_job_service
 from app.services.jobs import JobService
+from app.security.rate_limit_dependencies import limit_inbox_sync
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/gmail", tags=["gmail"])
@@ -140,6 +141,7 @@ def sync_gmail(
     request: GmailSyncRequest,
     http_request: Request,
     user: CurrentUser,
+    _rate_limit: Annotated[None, Depends(limit_inbox_sync)],
     jobs: Annotated[JobService, Depends(get_job_service)],
 ) -> JobQueued:
     return jobs.enqueue(

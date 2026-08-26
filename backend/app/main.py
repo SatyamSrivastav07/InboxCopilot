@@ -40,6 +40,7 @@ from app.genai.reply_chain import ReplyGenerationError
 from app.services.reply_service import DraftConflictError, DraftUnsafeError
 from app.services.thread_context_service import ThreadContextError
 from app.services.jobs import JobNotFoundError, JobQueueUnavailableError
+from app.security.rate_limit import RateLimitExceededError, RateLimitUnavailableError
 from app.vectorstore.errors import VectorStoreError
 from sqlalchemy import text
 
@@ -147,6 +148,20 @@ def create_app() -> FastAPI:
         request: Request, exc: GmailRateLimitError
     ) -> JSONResponse:
         return error_response(request, 429, "GMAIL_RATE_LIMIT", str(exc))
+
+    @app.exception_handler(RateLimitExceededError)
+    async def application_rate_limit_handler(
+        request: Request, exc: RateLimitExceededError
+    ) -> JSONResponse:
+        response = error_response(request, 429, "RATE_LIMITED", str(exc))
+        response.headers["Retry-After"] = str(exc.retry_after)
+        return response
+
+    @app.exception_handler(RateLimitUnavailableError)
+    async def rate_limit_unavailable_handler(
+        request: Request, exc: RateLimitUnavailableError
+    ) -> JSONResponse:
+        return error_response(request, 503, "RATE_LIMIT_UNAVAILABLE", str(exc))
 
     @app.exception_handler(GmailOAuthError)
     async def gmail_oauth_error_handler(

@@ -11,6 +11,7 @@ from app.services.dependencies import get_inbox_query_service
 from app.services.inbox_queries import InboxQueryService
 from app.services.job_dependencies import get_job_service
 from app.services.jobs import JobService
+from app.security.rate_limit_dependencies import limit_inbox_sync
 
 router = APIRouter(prefix="/api/emails", tags=["persisted-emails"])
 
@@ -48,6 +49,7 @@ def reprocess_email(
     email_id: int,
     request: Request,
     user: CurrentUser,
+    _rate_limit: Annotated[None, Depends(limit_inbox_sync)],
     service: Annotated[InboxQueryService, Depends(get_inbox_query_service)],
     jobs: Annotated[JobService, Depends(get_job_service)],
 ) -> JobQueued:

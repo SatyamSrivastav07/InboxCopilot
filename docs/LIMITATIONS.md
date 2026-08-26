@@ -6,4 +6,5 @@
 - Chroma is embedded persistence for the current project scope, not a large multi-tenant enterprise vector platform.
 - LLM classification and summaries are probabilistic and should be evaluated/tuned as inbox content changes.
 - Gmail and Mistral API quotas still apply; Phase 7 retries are bounded and avoid unlimited retries.
+- Phase 14 adds fixed per-user hourly limits for costly AI analysis, Gmail sync/reprocess, reply generation, and assistant requests. Limits are deliberately conservative for the initial public launch and return an explicit retry time when reached.
 - Docker Compose is local orchestration, not a cloud HA deployment. Production backups, monitoring, Google OAuth verification, and cookie behavior across custom frontend/backend domains need deployment validation.
