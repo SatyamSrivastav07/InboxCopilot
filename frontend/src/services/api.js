@@ -1,8 +1,10 @@
 import axios from 'axios'
 
-// Undefined means a local Vite server; an explicitly empty value means same-origin
-// requests through the production Nginx reverse proxy.
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+// Development talks to the local FastAPI server. Production defaults to same-origin
+// `/api` requests: Docker uses Nginx and Vercel uses the checked-in proxy function.
+// This keeps the signed browser session first-party instead of depending on a
+// cross-site Render cookie.
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '')
 
 const api = axios.create({
   baseURL: apiBaseUrl,

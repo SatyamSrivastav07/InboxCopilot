@@ -159,9 +159,9 @@ The seed is idempotent. For semantic search, run the normal full-index action af
 
 ## Render backend + Vercel frontend
 
-This repository includes `render.yaml` for a small Render deployment. It creates a Render web service, managed Postgres, and Redis-compatible Key Value. API and Celery run together in the web container so they share the one persistent `/app/data` disk used by embedded Chroma and the legacy local OAuth token. Render disks cannot be shared between separate services, which is why the worker is intentionally co-located for this deployment shape.
+This repository includes `render.yaml` for a small Render deployment. It creates a Render web service, managed Postgres, and Redis-compatible Key Value. API and Celery run together in the web container so they share the one persistent `/app/data` disk used by embedded Chroma. Render disks cannot be shared between separate services, which is why the worker is intentionally co-located for this deployment shape. The Render worker is supervised and restarts after an unexpected exit.
 
-1. Deploy the Vite frontend on Vercel first: import this GitHub repo, set **Root Directory** to `frontend`, and deploy. Copy its HTTPS URL.
+1. Deploy the Vite frontend on Vercel first: import this GitHub repo, set **Root Directory** to `frontend`, and set only the server-side variable `BACKEND_ORIGIN` to the Render API URL. Do not set `VITE_API_BASE_URL`; Vercel's included `/api/*` proxy keeps session cookies first-party.
 2. In Render, select **New > Blueprint**, connect the same repository, and choose `render.yaml`. Use a paid plan: the persistent disk and background processing need it.
 3. In Render's secret prompt, set `MISTRAL_API_KEY`, Google OAuth values, one persistent `TOKEN_ENCRYPTION_KEY`, one persistent `SESSION_SECRET`, and:
 
@@ -170,14 +170,14 @@ This repository includes `render.yaml` for a small Render deployment. It creates
    FRONTEND_URL=https://your-vercel-app.vercel.app
    ```
 
-4. After Render provides the API URL, update `GOOGLE_REDIRECT_URI` to:
+4. Set `GOOGLE_REDIRECT_URI` to the Vercel proxy URL (not the Render URL):
 
    ```text
-   https://your-render-service.onrender.com/api/gmail/callback
+   https://your-vercel-app.vercel.app/api/gmail/callback
    ```
 
    Add the same URL in Google Cloud Console under Authorized redirect URIs.
-5. In Vercel, add production environment variable `VITE_API_BASE_URL` with the Render API URL (without a trailing slash), then redeploy the frontend.
+5. Redeploy after adding both URLs. The full, ordered launch checklist is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Phase 10 enables authenticated Google sign-in, encrypted credentials per account, user-scoped inbox APIs, background jobs, dashboard caches, and semantic retrieval. The browser will first show **Sign in with Google**, then users can sync only their own Gmail inbox.
 
@@ -236,5 +236,6 @@ Offline fixtures use synthetic `@example.test` mail and mock model/retrieval beh
 
 - [Interview guide](docs/INTERVIEW_GUIDE.md)
 - [Current limitations](docs/LIMITATIONS.md)
+- [Public deployment guide](docs/DEPLOYMENT.md)
 
-Phase 10 is complete: browser authentication, per-user Gmail OAuth callbacks, and user-scoped API/session enforcement are implemented. Before a public launch, configure production secrets, deploy the frontend/backend, and complete Google's verification requirements for Gmail restricted scopes.
+Phase 11 is complete: Vercel has a server-side same-origin API proxy for secure public sessions, Render supervises its co-located Celery worker, and the public deployment/OAuth launch checklist is documented. Google verification for Gmail restricted scopes remains an external approval step before opening access beyond test users.
