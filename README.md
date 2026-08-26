@@ -155,6 +155,30 @@ python scripts/seed_demo_data.py
 
 The seed is idempotent. For semantic search, run the normal full-index action after configuring Mistral.
 
+## Render backend + Vercel frontend
+
+This repository includes `render.yaml` for a small, single-user Render deployment. It creates a Render web service, managed Postgres, and Redis-compatible Key Value. API and Celery run together in the web container so they share the one persistent `/app/data` disk used by embedded Chroma and the local OAuth token. Render disks cannot be shared between separate services, which is why the worker is intentionally co-located for this deployment shape.
+
+1. Deploy the Vite frontend on Vercel first: import this GitHub repo, set **Root Directory** to `frontend`, and deploy. Copy its HTTPS URL.
+2. In Render, select **New > Blueprint**, connect the same repository, and choose `render.yaml`. Use a paid plan: the persistent disk and background processing need it.
+3. In Render's secret prompt, set `MISTRAL_API_KEY`, Google OAuth values, and:
+
+   ```text
+   FRONTEND_ORIGINS=https://your-vercel-app.vercel.app
+   FRONTEND_URL=https://your-vercel-app.vercel.app
+   ```
+
+4. After Render provides the API URL, update `GOOGLE_REDIRECT_URI` to:
+
+   ```text
+   https://your-render-service.onrender.com/api/gmail/callback
+   ```
+
+   Add the same URL in Google Cloud Console under Authorized redirect URIs.
+5. In Vercel, add production environment variable `VITE_API_BASE_URL` with the Render API URL (without a trailing slash), then redeploy the frontend.
+
+This is appropriate only for the single Gmail account that authorizes the app. A public multi-user Gmail product needs per-user authentication and encrypted, isolated OAuth tokens before launch.
+
 ## Tests and offline GenAI evaluations
 
 ```powershell

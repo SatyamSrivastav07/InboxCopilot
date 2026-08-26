@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
+COPY scripts ./scripts
 RUN mkdir -p /app/data/chromadb \
     && chown -R appuser:appuser /app
 
