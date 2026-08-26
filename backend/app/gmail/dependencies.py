@@ -4,6 +4,7 @@ from app.config import get_settings
 from app.gmail.auth import GmailAuthService
 from app.gmail.client import build_gmail_client
 from app.gmail.fetcher import GmailFetcher
+from app.gmail.sender import GmailSender
 
 
 @lru_cache
@@ -15,3 +16,7 @@ def get_gmail_fetcher() -> GmailFetcher:
     # Keep OAuth/client resolution lazy so request-body validation is not masked
     # by a missing connection.
     return GmailFetcher(lambda: build_gmail_client(get_gmail_auth_service()))
+
+
+def get_gmail_sender() -> GmailSender:
+    return GmailSender(lambda: build_gmail_client(get_gmail_auth_service()))

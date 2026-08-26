@@ -10,13 +10,17 @@ from app.genai.analyzer import EmailAnalyzer, get_email_analyzer
 from app.genai.inbox_workflow import InboxQueryWorkflow
 from app.genai.query_router import QueryRouter
 from app.genai.rag import InboxRAG
-from app.gmail.dependencies import get_gmail_fetcher
+from app.genai.reply_chain import ReplyDraftGenerator
+from app.gmail.dependencies import get_gmail_fetcher, get_gmail_sender
 from app.gmail.fetcher import GmailFetcher
+from app.gmail.sender import GmailSender
 from app.services.email_persistence import EmailPersistenceService
 from app.services.gmail_sync import GmailSyncService
 from app.services.inbox_queries import InboxQueryService
 from app.services.reindex import ReindexService
+from app.services.reply_service import ReplyService
 from app.services.structured_query_service import StructuredQueryService
+from app.services.thread_context_service import ThreadContextService
 from app.vectorstore.dependencies import get_inbox_rag, get_vector_indexer
 from app.vectorstore.indexer import VectorIndexer
 
@@ -48,14 +52,37 @@ def get_query_router() -> QueryRouter:
     return QueryRouter(get_settings())
 
 
+@lru_cache
+def get_reply_draft_generator() -> ReplyDraftGenerator:
+    return ReplyDraftGenerator(get_settings())
+
+
+def get_reply_service(
+    db: Annotated[Session, Depends(get_db)],
+    fetcher: Annotated[GmailFetcher, Depends(get_gmail_fetcher)],
+    sender: Annotated[GmailSender, Depends(get_gmail_sender)],
+    generator: Annotated[
+        ReplyDraftGenerator, Depends(get_reply_draft_generator)
+    ],
+) -> ReplyService:
+    return ReplyService(
+        db,
+        ThreadContextService(db, fetcher, get_settings()),
+        generator,
+        sender,
+    )
+
+
 def get_inbox_query_workflow(
     db: Annotated[Session, Depends(get_db)],
     rag: Annotated[InboxRAG, Depends(get_inbox_rag)],
     router: Annotated[QueryRouter, Depends(get_query_router)],
+    reply_service: Annotated[ReplyService, Depends(get_reply_service)],
 ) -> InboxQueryWorkflow:
     return InboxQueryWorkflow(
         router,
         StructuredQueryService(db),
         rag,
         get_settings(),
+        reply_service=reply_service,
     )

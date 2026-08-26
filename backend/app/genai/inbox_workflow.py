@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import re
+from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.output_parsers import StrOutputParser
@@ -27,6 +29,7 @@ from app.schemas.query import (
 from app.schemas.search import InboxSource
 from app.schemas.search import SearchFilters
 from app.services.structured_query_service import StructuredQueryService
+from app.services.reply_service import ReplyService
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +147,7 @@ class InboxQueryWorkflow:
         *,
         hybrid_model: ChatMistralAI | None = None,
         hybrid_answer_chain: Runnable | None = None,
+        reply_service: ReplyService | None = None,
     ) -> None:
         self.router = router
         self.structured_service = structured_service
@@ -151,6 +155,7 @@ class InboxQueryWorkflow:
         self.settings = settings
         self.hybrid_model = hybrid_model
         self._hybrid_answer_chain = hybrid_answer_chain
+        self.reply_service = reply_service
 
         self.hybrid_parallel = RunnableParallel(
             question=RunnableLambda(lambda state: state["question"]),
@@ -170,6 +175,10 @@ class InboxQueryWorkflow:
             (
                 lambda state: state["route"].route == QueryRouteType.HYBRID,
                 RunnableLambda(self._run_hybrid),
+            ),
+            (
+                lambda state: state["route"].route == QueryRouteType.REPLY_DRAFT,
+                RunnableLambda(self._run_reply_draft),
             ),
             RunnableLambda(self._run_unsupported),
         )
@@ -280,6 +289,74 @@ class InboxQueryWorkflow:
 
     def _run_unsupported(self, state: dict[str, Any]) -> RoutedInboxResponse:
         return self._response(state["route"], UNSUPPORTED_ANSWER, [])
+
+    @staticmethod
+    def _reply_instruction(question: str) -> str | None:
+        match = re.search(
+            r"\b(?:saying|and (?:say|ask|tell)|tell them|ask them)\b\s*[:,-]?\s*(.+)$",
+            question,
+            re.IGNORECASE,
+        )
+        return match.group(1).strip() if match else None
+
+    @staticmethod
+    def _result_time(item) -> datetime:
+        try:
+            value = datetime.fromisoformat(item.received_at)
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+    def _run_reply_draft(self, state: dict[str, Any]) -> RoutedInboxResponse:
+        question = state["question"]
+        if re.search(r"\b(all|every)\b.*\b(email|message|reply)", question, re.IGNORECASE):
+            return self._response(
+                state["route"],
+                "Bulk reply drafting is disabled. Select one concrete email before drafting.",
+                [],
+            )
+        candidates = self.rag.retrieve(question, top_k=3, filters=state.get("filters"))
+        if not candidates:
+            return self._response(
+                state["route"],
+                "I couldn't identify an email to reply to. Open an email in Inbox and choose Draft Reply.",
+                [],
+            )
+
+        selected = None
+        if len(candidates) == 1:
+            selected = candidates[0]
+        elif re.search(r"\b(latest|most recent|newest)\b", question, re.IGNORECASE):
+            selected = max(candidates, key=self._result_time)
+        elif candidates[0].score - candidates[1].score >= 0.15:
+            selected = candidates[0]
+
+        sources = format_sources(candidates)
+        if selected is None:
+            return self._response(
+                state["route"],
+                "I found multiple possible emails. Choose one of the sources to open it, then select Draft Reply.",
+                sources,
+            )
+        if self.reply_service is None:
+            return self._response(
+                state["route"],
+                "Open the selected source and choose Draft Reply to continue.",
+                format_sources([selected]),
+            )
+
+        from app.schemas.draft import ReplyDraftRequest
+
+        draft = self.reply_service.generate(
+            selected.email_id,
+            ReplyDraftRequest(instruction=self._reply_instruction(question)),
+        )
+        response = self._response(
+            state["route"],
+            "A reply draft is ready for review. It has not been approved or sent.",
+            format_sources([selected]),
+        )
+        return response.model_copy(update={"draft": draft})
 
     def ask(
         self,

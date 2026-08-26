@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { askInbox, semanticSearch } from '../services/api.js'
+import DraftReplyPanel from '../components/DraftReplyPanel.jsx'
 
 const examples = [
   'What deadlines are mentioned in my recent emails?',
@@ -40,6 +41,7 @@ export default function AssistantPage() {
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [activeDraft, setActiveDraft] = useState(null)
 
   const openEmail = (emailId) => navigate(`/inbox?email=${emailId}`)
 
@@ -53,6 +55,7 @@ export default function AssistantPage() {
       if (mode === 'ask') {
         const response = await askInbox(value)
         setHistory((items) => [...items, { question: value, ...response }])
+        if (response.draft) setActiveDraft(response.draft)
       } else {
         const response = await semanticSearch(value)
         setResults(response.results)
@@ -137,6 +140,7 @@ export default function AssistantPage() {
           </button>
         </div>
       </form>
+      {activeDraft && <DraftReplyPanel initialDraft={activeDraft} email={{ id: activeDraft.email_id, sender: activeDraft.recipient, subject: activeDraft.subject }} onClose={() => setActiveDraft(null)} />}
     </div>
   )
 }

@@ -6,7 +6,7 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
-export default function GmailEmailDetails({ item, onClose }) {
+export default function GmailEmailDetails({ item, onClose, onDraftReply }) {
   if (!item?.gmail || !item.analysis) return null
   const { gmail, analysis } = item
 
@@ -18,7 +18,7 @@ export default function GmailEmailDetails({ item, onClose }) {
             <p className="text-sm text-slate-500">Email details</p>
             <h2 className="truncate text-lg font-semibold" id="gmail-detail-title">{gmail.subject}</h2>
           </div>
-          <button className="rounded-lg border px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" type="button" onClick={onClose}>Close</button>
+          <div className="flex gap-2">{onDraftReply && <button className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white" type="button" onClick={onDraftReply}>Draft Reply</button>}<button className="rounded-lg border px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" type="button" onClick={onClose}>Close</button></div>
         </div>
         <div className="space-y-4 p-5 sm:p-7">
           <section className="card">
@@ -39,4 +39,3 @@ export default function GmailEmailDetails({ item, onClose }) {
     </div>
   )
 }
-

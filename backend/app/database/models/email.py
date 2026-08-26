@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
 if TYPE_CHECKING:
+    from app.database.models.draft import EmailDraftRecord
     from app.database.models.entity import EntityRecord
     from app.database.models.meeting import MeetingRecord
     from app.database.models.task import TaskRecord
@@ -56,4 +57,6 @@ class EmailRecord(Base):
     entities: Mapped[list[EntityRecord]] = relationship(
         back_populates="email", cascade="all, delete-orphan", passive_deletes=True
     )
-
+    drafts: Mapped[list[EmailDraftRecord]] = relationship(
+        back_populates="email", cascade="all, delete-orphan", passive_deletes=True
+    )

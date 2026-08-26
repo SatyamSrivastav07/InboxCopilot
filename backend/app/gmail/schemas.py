@@ -21,6 +21,9 @@ class GmailEmail(GmailModel):
     body: str
     received_at: datetime | str
     labels: list[str] = Field(default_factory=list)
+    reply_to: str | None = None
+    internet_message_id: str | None = None
+    references: list[str] = Field(default_factory=list)
 
 
 class GmailStatus(GmailModel):

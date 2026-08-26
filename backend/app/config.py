@@ -29,6 +29,8 @@ class Settings:
     rag_score_threshold: float = 0.2
     email_chunk_size: int = 1000
     email_chunk_overlap: int = 100
+    reply_thread_max_chars: int = 12_000
+    reply_thread_recent_messages: int = 8
 
     def require_mistral_api_key(self) -> str:
         if not self.mistral_api_key:
@@ -86,4 +88,8 @@ def get_settings() -> Settings:
         rag_score_threshold=float(os.getenv("RAG_SCORE_THRESHOLD", "0.2")),
         email_chunk_size=int(os.getenv("EMAIL_CHUNK_SIZE", "1000")),
         email_chunk_overlap=int(os.getenv("EMAIL_CHUNK_OVERLAP", "100")),
+        reply_thread_max_chars=int(os.getenv("REPLY_THREAD_MAX_CHARS", "12000")),
+        reply_thread_recent_messages=int(
+            os.getenv("REPLY_THREAD_RECENT_MESSAGES", "8")
+        ),
     )

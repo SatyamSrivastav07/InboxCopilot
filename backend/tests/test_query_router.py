@@ -15,6 +15,7 @@ from app.schemas.query import (
     StructuredQueryResult,
 )
 from app.schemas.search import AskInboxResponse, InboxSource
+from app.schemas.draft import ReplyDraft
 from app.services.structured_query_service import StructuredQueryService
 from app.vectorstore.retriever import RetrievedEmail
 
@@ -87,6 +88,25 @@ def test_route_guard_promotes_prioritization_and_mentioned_deadlines_to_hybrid(t
     assert deadlines.intent == "email_deadline_summary"
 
 
+def test_route_guard_classifies_drafting_without_sending(tmp_path):
+    router = QueryRouter(
+        make_settings(tmp_path),
+        route_chain=RunnableLambda(
+            lambda _: {
+                "route": "unsupported",
+                "intent": "unknown",
+                "reason": "Initial model decision.",
+                "confidence": 0.7,
+            }
+        ),
+    )
+
+    result = router.route("Draft a reply to the latest HR email saying thank you")
+
+    assert result.route == QueryRouteType.REPLY_DRAFT
+    assert result.intent == "draft_reply"
+
+
 class FakeRouter:
     def __init__(self, route_type):
         self.route_type = route_type
@@ -153,6 +173,27 @@ class FakeRAG:
         ]
 
 
+class FakeReplyService:
+    def __init__(self):
+        self.calls = []
+
+    def generate(self, email_id, request):
+        self.calls.append((email_id, request))
+        now = datetime(2026, 8, 26, tzinfo=timezone.utc)
+        return ReplyDraft(
+            draft_id=77,
+            email_id=email_id,
+            recipient="hr@example.com",
+            subject="Re: Onboarding",
+            body="Thank you for the onboarding details.",
+            generated_body="Thank you for the onboarding details.",
+            status="draft",
+            requires_user_confirmation=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+
 def workflow(tmp_path, route_type):
     structured = FakeStructuredService()
     rag = FakeRAG()
@@ -211,6 +252,28 @@ def test_unsupported_branch_does_not_query_data_sources(tmp_path):
     assert structured.calls == 0
     assert rag.ask_calls == 0
     assert rag.retrieve_calls == 0
+
+
+def test_assistant_draft_branch_creates_draft_but_never_sends(tmp_path):
+    structured = FakeStructuredService()
+    rag = FakeRAG()
+    replies = FakeReplyService()
+    flow = InboxQueryWorkflow(
+        FakeRouter(QueryRouteType.REPLY_DRAFT),
+        structured,
+        rag,
+        make_settings(tmp_path),
+        reply_service=replies,
+    )
+
+    response = flow.ask("Draft a reply to the latest HR email saying thank you")
+
+    assert response.route == QueryRouteType.REPLY_DRAFT
+    assert response.draft.draft_id == 77
+    assert response.draft.status == "draft"
+    assert response.draft.requires_user_confirmation is True
+    assert replies.calls[0][0] == 8
+    assert replies.calls[0][1].instruction == "thank you"
 
 
 def persisted_email(email_id: int, *, reply_required=True, priority="high"):

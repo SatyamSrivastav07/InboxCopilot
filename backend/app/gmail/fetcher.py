@@ -10,7 +10,7 @@ from googleapiclient.errors import HttpError
 from app.gmail.errors import GmailAPIError, GmailRateLimitError
 
 
-def _translate_http_error(exc: HttpError) -> GmailAPIError:
+def translate_http_error(exc: HttpError) -> GmailAPIError:
     status_code = getattr(exc.resp, "status", None)
     try:
         payload = json.loads(exc.content.decode("utf-8", errors="replace"))
@@ -29,7 +29,8 @@ def _translate_http_error(exc: HttpError) -> GmailAPIError:
         )
     if "insufficientPermissions" in reasons:
         return GmailAPIError(
-            "The Gmail connection is missing read-only permission. Connect Gmail again."
+            "The Gmail connection is missing required permission. Delete token.json "
+            "and connect Gmail again."
         )
     rate_limit_reasons = {
         "rateLimitExceeded",
@@ -64,7 +65,7 @@ class GmailFetcher:
             response = request.execute()
             return [item["id"] for item in response.get("messages", []) if item.get("id")]
         except HttpError as exc:
-            raise _translate_http_error(exc) from exc
+            raise translate_http_error(exc) from exc
 
     def fetch_recent(self, limit: int = 20, unread_only: bool = False) -> list[dict[str, Any]]:
         return [
@@ -84,7 +85,7 @@ class GmailFetcher:
                 .execute()
             )
         except HttpError as exc:
-            raise _translate_http_error(exc) from exc
+            raise translate_http_error(exc) from exc
 
     def fetch_thread(self, thread_id: str) -> list[dict[str, Any]]:
         try:
@@ -96,4 +97,4 @@ class GmailFetcher:
             )
             return thread.get("messages", [])
         except HttpError as exc:
-            raise _translate_http_error(exc) from exc
+            raise translate_http_error(exc) from exc

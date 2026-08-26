@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database.base import Base
-from app.database.models import EmailRecord, EntityRecord, MeetingRecord, TaskRecord  # noqa: F401
+from app.database.models import EmailDraftRecord, EmailRecord, EntityRecord, MeetingRecord, TaskRecord  # noqa: F401
 
 
 @pytest.fixture
@@ -28,4 +28,3 @@ def override_db(db_session: Session):
         yield db_session
 
     return dependency
-

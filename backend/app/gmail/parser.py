@@ -68,6 +68,11 @@ def _header_map(payload: dict[str, Any]) -> dict[str, list[str]]:
     return headers
 
 
+def message_headers(message: dict[str, Any]) -> dict[str, list[str]]:
+    """Expose normalized Gmail headers without leaking raw payload handling."""
+    return _header_map(message.get("payload") or {})
+
+
 def _recipients(headers: dict[str, list[str]]) -> list[str]:
     raw_values = [
         value
@@ -121,5 +126,7 @@ def parse_gmail_message(message: dict[str, Any]) -> GmailEmail:
         body=body,
         received_at=_received_at(message, headers),
         labels=[str(label) for label in message.get("labelIds") or []],
+        reply_to=next(iter(headers.get("reply-to", [])), None),
+        internet_message_id=next(iter(headers.get("message-id", [])), None),
+        references=" ".join(headers.get("references", [])).split(),
     )
-

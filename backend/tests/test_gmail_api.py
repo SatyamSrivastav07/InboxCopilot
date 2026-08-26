@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.genai.analyzer import get_email_analyzer
 from app.config import Settings
 from app.database.dependencies import get_db
-from app.gmail.auth import GMAIL_READONLY_SCOPE, GmailAuthService
+from app.gmail.auth import GMAIL_READONLY_SCOPE, GMAIL_SCOPES, GMAIL_SEND_SCOPE, GmailAuthService
 from app.gmail.dependencies import get_gmail_fetcher
 from app.gmail.parser import parse_gmail_message
 from app.main import app
@@ -88,7 +88,7 @@ def test_gmail_scope_is_read_only():
     assert GMAIL_READONLY_SCOPE == "https://www.googleapis.com/auth/gmail.readonly"
 
 
-def test_authorization_url_uses_read_only_scope_and_backend_redirect(tmp_path: Path):
+def test_authorization_url_uses_minimal_read_and_send_scopes(tmp_path: Path):
     settings = Settings(
         mistral_api_key=None,
         mistral_model="mistral-small-latest",
@@ -104,7 +104,11 @@ def test_authorization_url_uses_read_only_scope_and_backend_redirect(tmp_path: P
     authorization_url = auth_service.authorization_url()
     query = parse_qs(urlparse(authorization_url).query)
 
-    assert query["scope"] == [GMAIL_READONLY_SCOPE]
+    granted = set(query["scope"][0].split())
+    assert granted == set(GMAIL_SCOPES)
+    assert GMAIL_READONLY_SCOPE in granted
+    assert GMAIL_SEND_SCOPE in granted
+    assert "https://www.googleapis.com/auth/gmail.modify" not in granted
     assert query["redirect_uri"] == [settings.google_redirect_uri]
     assert query["state"][0]
     assert query["code_challenge"][0]

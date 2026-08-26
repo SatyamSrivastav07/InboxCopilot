@@ -6,6 +6,7 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.email import EmailCategory, Priority
+from app.schemas.draft import ReplyDraft
 from app.schemas.search import InboxSource, SearchFilters
 
 
@@ -18,6 +19,7 @@ class QueryRouteType(str, Enum):
     SEMANTIC = "semantic"
     HYBRID = "hybrid"
     UNSUPPORTED = "unsupported"
+    REPLY_DRAFT = "reply_draft"
 
 
 class StructuredIntent(str, Enum):
@@ -88,3 +90,4 @@ class RoutedInboxResponse(QueryModel):
     intent: str
     reason: str
     confidence: float
+    draft: ReplyDraft | None = None

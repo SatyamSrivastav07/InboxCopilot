@@ -17,6 +17,8 @@ from app.config import Settings
 from app.gmail.errors import GmailNotConnectedError, GmailOAuthError
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+GMAIL_SCOPES = [GMAIL_READONLY_SCOPE, GMAIL_SEND_SCOPE]
 OAUTH_STATE_TTL_SECONDS = 10 * 60
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,7 @@ class GmailAuthService:
 
     def _flow(self, state: str | None = None) -> Flow:
         flow = Flow.from_client_config(
-            self._client_config(), scopes=[GMAIL_READONLY_SCOPE], state=state
+            self._client_config(), scopes=GMAIL_SCOPES, state=state
         )
         flow.redirect_uri = self._settings.google_redirect_uri
         return flow
@@ -111,10 +113,19 @@ class GmailAuthService:
         if not self._token_file.exists():
             raise GmailNotConnectedError("Gmail is not connected.")
         try:
-            credentials = Credentials.from_authorized_user_file(
-                str(self._token_file), scopes=[GMAIL_READONLY_SCOPE]
+            token_info = json.loads(self._token_file.read_text(encoding="utf-8"))
+            saved_scopes = set(token_info.get("scopes") or [])
+            if not set(GMAIL_SCOPES).issubset(saved_scopes):
+                raise GmailNotConnectedError(
+                    "The saved Gmail token is missing reply-send permission. "
+                    "Delete token.json and connect Gmail again."
+                )
+            credentials = Credentials.from_authorized_user_info(
+                token_info, scopes=GMAIL_SCOPES
             )
-        except (OSError, ValueError) as exc:
+        except GmailNotConnectedError:
+            raise
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
             raise GmailNotConnectedError(
                 "The saved Gmail token is invalid. Connect Gmail again."
             ) from exc
@@ -134,9 +145,10 @@ class GmailAuthService:
 
         if not credentials.valid:
             raise GmailNotConnectedError("Gmail is not connected.")
-        if GMAIL_READONLY_SCOPE not in (credentials.scopes or []):
+        if not set(GMAIL_SCOPES).issubset(set(credentials.scopes or [])):
             raise GmailNotConnectedError(
-                "The saved Gmail token does not have the required read-only scope."
+                "The saved Gmail token is missing required Gmail permissions. "
+                "Delete token.json and connect Gmail again."
             )
         return credentials
 

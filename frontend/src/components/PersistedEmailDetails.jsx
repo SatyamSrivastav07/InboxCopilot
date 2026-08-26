@@ -1,4 +1,6 @@
 import GmailEmailDetails from './GmailEmailDetails.jsx'
+import DraftReplyPanel from './DraftReplyPanel.jsx'
+import { useState } from 'react'
 
 function toLegacyDetail(email) {
   const grouped = { people: [], organizations: [], dates: [], locations: [] }
@@ -38,6 +40,6 @@ function toLegacyDetail(email) {
 }
 
 export default function PersistedEmailDetails({ email, onClose }) {
-  return <GmailEmailDetails item={toLegacyDetail(email)} onClose={onClose} />
+  const [drafting, setDrafting] = useState(false)
+  return <><GmailEmailDetails item={toLegacyDetail(email)} onClose={onClose} onDraftReply={() => setDrafting(true)} />{drafting && <DraftReplyPanel email={email} onClose={() => setDrafting(false)} />}</>
 }
-

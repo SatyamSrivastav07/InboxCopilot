@@ -26,7 +26,8 @@ Routes:
 - structured: counts, filters, pending tasks, deadlines, meetings, priorities, or reply-required status available in PostgreSQL.
 - semantic: what someone said, what was discussed, topic search, or content summary that requires email meaning.
 - hybrid: prioritization or synthesis that needs both structured tasks/status and semantic email explanations.
-- unsupported: sending, deleting, drafting replies, mailbox mutation, external web knowledge, or anything outside the persisted inbox.
+- reply_draft: writing or drafting a reply to one identifiable email. This creates a draft only and never sends.
+- unsupported: sending, deleting, mailbox mutation, external web knowledge, or anything outside the persisted inbox.
 
 Use an intent name that concisely describes the request. Confidence is only a routing estimate.
 Do not answer the question.
@@ -139,6 +140,13 @@ class QueryRouter:
                 "The request combines structured priority/action data with email meaning.",
             ),
         )
+        if re.search(r"\b(draft|write|compose)\b.*\b(reply|response|email)\b", normalized):
+            return QueryRoute(
+                route=QueryRouteType.REPLY_DRAFT,
+                intent="draft_reply",
+                reason="The user requested a reply draft; sending still requires explicit UI approval.",
+                confidence=max(route.confidence, 0.97),
+            )
         for pattern, intent, reason in hybrid_rules:
             if re.search(pattern, normalized):
                 return QueryRoute(

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from app.api.analyze import router as analyze_router
 from app.api.chat import router as chat_router
 from app.api.dashboard import router as dashboard_router
+from app.api.drafts import router as drafts_router
 from app.api.emails import router as emails_router
 from app.api.gmail import router as gmail_router
 from app.api.meetings import router as meetings_router
@@ -25,11 +26,14 @@ from app.gmail.errors import (
 )
 from app.genai.query_router import QueryRoutingError
 from app.genai.rag import RAGGenerationError
+from app.genai.reply_chain import ReplyGenerationError
+from app.services.reply_service import DraftConflictError, DraftUnsafeError
+from app.services.thread_context_service import ThreadContextError
 from app.vectorstore.errors import VectorStoreError
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="AI Inbox Copilot API", version="0.5.0")
+    app = FastAPI(title="AI Inbox Copilot API", version="0.6.0")
     settings = get_settings()
     app.add_middleware(
         CORSMiddleware,
@@ -46,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_router)
     app.include_router(search_router)
     app.include_router(chat_router)
+    app.include_router(drafts_router)
 
     @app.exception_handler(ConfigurationError)
     async def configuration_error_handler(
@@ -118,6 +123,30 @@ def create_app() -> FastAPI:
         _request: Request, exc: QueryRoutingError
     ) -> JSONResponse:
         return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+    @app.exception_handler(ReplyGenerationError)
+    async def reply_generation_error_handler(
+        _request: Request, exc: ReplyGenerationError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+    @app.exception_handler(DraftConflictError)
+    async def draft_conflict_error_handler(
+        _request: Request, exc: DraftConflictError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(DraftUnsafeError)
+    async def draft_unsafe_error_handler(
+        _request: Request, exc: DraftUnsafeError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(ThreadContextError)
+    async def thread_context_error_handler(
+        _request: Request, exc: ThreadContextError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
 
     @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:

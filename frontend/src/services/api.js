@@ -130,3 +130,39 @@ export async function askInbox(question) {
     throw apiError(error, 'Could not answer from the inbox right now.')
   }
 }
+
+export async function generateReplyDraft(emailId, options) {
+  try {
+    const { data } = await api.post(`/api/emails/${emailId}/draft-reply`, options, { timeout: 2 * 60_000 })
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not generate the reply draft.')
+  }
+}
+
+export async function updateReplyDraft(draftId, body) {
+  try {
+    const { data } = await api.patch(`/api/drafts/${draftId}`, { body })
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not save the edited draft.')
+  }
+}
+
+export async function approveReplyDraft(draftId) {
+  try {
+    const { data } = await api.post(`/api/drafts/${draftId}/approve`)
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not approve the draft.')
+  }
+}
+
+export async function sendReplyDraft(draftId) {
+  try {
+    const { data } = await api.post(`/api/drafts/${draftId}/send`)
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not send the approved reply.')
+  }
+}
