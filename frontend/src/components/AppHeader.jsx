@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 
 const tabClass = ({ isActive }) =>
   `rounded-lg px-3 py-2 text-sm font-semibold transition ${
@@ -12,17 +13,18 @@ export default function AppHeader() {
   const { session, signOut } = useAuth()
   const user = session?.user
   return (
-    <header className="border-b bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-col gap-5 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+    <header className="app-header sticky top-0 z-40 border-b backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-4 sm:px-8 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-600 font-bold text-white">AI</div>
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 font-bold text-white shadow-lg shadow-indigo-500/20">AI</div>
           <div>
             <h1 className="text-xl font-bold tracking-tight">AI Inbox Copilot</h1>
             <p className="text-sm text-slate-500">Turn email into clear next steps.</p>
           </div>
         </div>
-        {user ? (
-          <nav className="flex flex-wrap rounded-xl border bg-white p-1" aria-label="Primary navigation">
+        <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+          {user ? (
+          <nav className="app-nav flex max-w-full flex-nowrap overflow-x-auto rounded-xl border p-1" aria-label="Primary navigation">
             <NavLink className={tabClass} end to="/">Dashboard</NavLink>
             <NavLink className={tabClass} to="/inbox">Inbox</NavLink>
             <NavLink className={tabClass} to="/tasks">Tasks</NavLink>
@@ -32,12 +34,14 @@ export default function AppHeader() {
             <NavLink className={tabClass} to="/assistant">AI Assistant</NavLink>
           </nav>
         ) : (
-          <nav className="flex rounded-xl border bg-white p-1" aria-label="Public navigation">
+          <nav className="app-nav flex rounded-xl border p-1" aria-label="Public navigation">
             <NavLink className={tabClass} end to="/">About</NavLink>
             <NavLink className={tabClass} to="/gmail">Connect Gmail</NavLink>
           </nav>
         )}
-        {user && <div className="flex items-center gap-2 text-sm"><span className="max-w-40 truncate text-slate-500">{user.email || user.display_name}</span><button className="rounded-lg border px-3 py-2 font-semibold text-slate-600 hover:bg-slate-50" type="button" onClick={() => signOut().catch(() => {})}>Sign out</button></div>}
+          <ThemeToggle />
+          {user && <div className="user-menu flex items-center gap-2 text-sm"><span className="max-w-40 truncate text-slate-500">{user.email || user.display_name}</span><button className="sign-out-button rounded-lg border px-3 py-2 font-semibold text-slate-600 hover:bg-slate-50" type="button" onClick={() => signOut().catch(() => {})}>Sign out</button></div>}
+        </div>
       </div>
     </header>
   )

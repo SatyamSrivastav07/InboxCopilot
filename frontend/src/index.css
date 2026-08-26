@@ -9,6 +9,7 @@
 
   body {
     @apply m-0 min-w-80 bg-canvas font-sans text-ink antialiased;
+    transition: background-color 180ms ease, color 180ms ease;
   }
 
   button,
@@ -28,3 +29,175 @@
   }
 }
 
+/* The theme uses neutral, light-tinted foreground colors in dark mode instead
+   of pure white so long email content remains comfortable to read. */
+.app-header {
+  background: color-mix(in srgb, white 90%, transparent);
+}
+
+.app-nav {
+  background: color-mix(in srgb, white 82%, transparent);
+}
+
+.app-footer {
+  background: color-mix(in srgb, white 78%, transparent);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgb(203 213 225);
+  border-radius: 0.7rem;
+  background: rgb(255 255 255 / 0.8);
+  color: rgb(71 85 105);
+  padding: 0.48rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.theme-toggle:hover {
+  transform: translateY(-1px);
+  background: rgb(248 250 252);
+  color: rgb(49 46 129);
+}
+
+.theme-toggle__icon {
+  font-size: 1.1rem;
+}
+
+html.dark {
+  background: #0b1120;
+}
+
+html.dark body {
+  background:
+    radial-gradient(circle at top right, rgb(79 70 229 / 0.17), transparent 30rem),
+    radial-gradient(circle at 12% 24%, rgb(14 165 233 / 0.1), transparent 25rem),
+    #0b1120;
+  color: #e5edf8;
+}
+
+html.dark * {
+  border-color: rgb(51 65 85 / 0.9);
+}
+
+html.dark .app-header,
+html.dark .app-footer {
+  background: rgb(12 19 35 / 0.82);
+}
+
+html.dark .app-nav,
+html.dark .theme-toggle,
+html.dark .sign-out-button,
+html.dark .user-menu {
+  border-color: rgb(71 85 105 / 0.8);
+  background: rgb(15 23 42 / 0.72);
+  color: #cbd8ea;
+}
+
+html.dark .theme-toggle:hover,
+html.dark .sign-out-button:hover {
+  background: rgb(30 41 59);
+  color: #e6edff;
+}
+
+html.dark .card {
+  border-color: rgb(51 65 85 / 0.9);
+  background: rgb(15 23 42 / 0.82);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.22);
+}
+
+html.dark .field,
+html.dark input,
+html.dark textarea,
+html.dark select {
+  border-color: rgb(71 85 105 / 0.85) !important;
+  background-color: rgb(15 23 42) !important;
+  color: #e1e9f5 !important;
+}
+
+html.dark .field::placeholder,
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.dark .bg-white,
+html.dark .bg-white\/90 {
+  background-color: rgb(15 23 42 / 0.84) !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-100 {
+  background-color: rgb(30 41 59 / 0.76) !important;
+}
+
+html.dark .bg-indigo-50 {
+  background-color: rgb(49 46 129 / 0.33) !important;
+}
+
+html.dark .bg-amber-50 {
+  background-color: rgb(120 53 15 / 0.25) !important;
+}
+
+html.dark .bg-emerald-50 {
+  background-color: rgb(6 78 59 / 0.3) !important;
+}
+
+html.dark .bg-rose-50 {
+  background-color: rgb(136 19 55 / 0.22) !important;
+}
+
+html.dark .public-hero {
+  border-color: rgb(99 102 241 / 0.44);
+  background: linear-gradient(135deg, rgb(30 27 75 / 0.9), rgb(15 23 42 / 0.92) 54%, rgb(12 74 110 / 0.54)) !important;
+  box-shadow: 0 22px 54px rgb(0 0 0 / 0.26);
+}
+
+html.dark .public-permissions {
+  border-color: rgb(99 102 241 / 0.44);
+  background: rgb(15 23 42 / 0.76) !important;
+}
+
+html.dark .text-ink,
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700,
+html.dark .text-slate-600,
+html.dark .text-slate-500 {
+  color: #d4dfef !important;
+}
+
+html.dark .text-slate-400 {
+  color: #aebdd1 !important;
+}
+
+html.dark .text-indigo-600,
+html.dark .text-indigo-700 {
+  color: #b9c5ff !important;
+}
+
+html.dark .text-emerald-700,
+html.dark .text-emerald-800 {
+  color: #86efc2 !important;
+}
+
+html.dark .text-amber-700,
+html.dark .text-amber-800,
+html.dark .text-amber-900 {
+  color: #fbd38d !important;
+}
+
+html.dark .text-rose-700,
+html.dark .text-rose-800,
+html.dark .text-rose-900 {
+  color: #fbb6ce !important;
+}
+
+html.dark .divide-y > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(51 65 85 / 0.85) !important;
+}
