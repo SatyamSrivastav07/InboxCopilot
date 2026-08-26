@@ -1,11 +1,14 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.schemas.email import EmailCategory, Priority
 from app.schemas.persistence import PersistedEmail
+from app.schemas.jobs import JobQueued
 from app.services.dependencies import get_inbox_query_service
 from app.services.inbox_queries import InboxQueryService
+from app.services.job_dependencies import get_job_service
+from app.services.jobs import JobService
 
 router = APIRouter(prefix="/api/emails", tags=["persisted-emails"])
 
@@ -35,3 +38,18 @@ def get_email(
 ) -> PersistedEmail:
     return service.get_email(email_id)
 
+
+@router.post("/{email_id}/reprocess", response_model=JobQueued, status_code=202)
+def reprocess_email(
+    email_id: int,
+    request: Request,
+    service: Annotated[InboxQueryService, Depends(get_inbox_query_service)],
+    jobs: Annotated[JobService, Depends(get_job_service)],
+) -> JobQueued:
+    service.get_email(email_id)
+    return jobs.enqueue(
+        "app.workers.gmail_tasks.reprocess_email",
+        kwargs={"email_id": email_id},
+        lock_key=f"lock:email-reprocess:{email_id}",
+        request_id=getattr(request.state, "request_id", None),
+    )

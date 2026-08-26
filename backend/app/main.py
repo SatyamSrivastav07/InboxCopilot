@@ -1,4 +1,8 @@
-from fastapi import FastAPI, Request
+import logging
+import uuid
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -8,10 +12,14 @@ from app.api.dashboard import router as dashboard_router
 from app.api.drafts import router as drafts_router
 from app.api.emails import router as emails_router
 from app.api.gmail import router as gmail_router
+from app.api.jobs import router as jobs_router
 from app.api.meetings import router as meetings_router
 from app.api.search import router as search_router
 from app.api.tasks import router as tasks_router
 from app.config import ConfigurationError, get_settings
+from app.cache.client import get_redis_client
+from app.core.logging import configure_logging
+from app.database.session import get_engine
 from app.database.errors import (
     DatabaseUnavailableError,
     PersistenceError,
@@ -29,11 +37,16 @@ from app.genai.rag import RAGGenerationError
 from app.genai.reply_chain import ReplyGenerationError
 from app.services.reply_service import DraftConflictError, DraftUnsafeError
 from app.services.thread_context_service import ThreadContextError
+from app.services.jobs import JobNotFoundError, JobQueueUnavailableError
 from app.vectorstore.errors import VectorStoreError
+from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="AI Inbox Copilot API", version="0.6.0")
+    configure_logging()
+    app = FastAPI(title="AI Inbox Copilot API", version="0.7.0")
     settings = get_settings()
     app.add_middleware(
         CORSMiddleware,
@@ -41,7 +54,23 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
     )
+
+    @app.middleware("http")
+    async def request_id_middleware(request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        logger.info(
+            "event=http_request request_id=%s method=%s path=%s status=%s",
+            request_id,
+            request.method,
+            request.url.path,
+            response.status_code,
+        )
+        return response
     app.include_router(analyze_router)
     app.include_router(gmail_router)
     app.include_router(emails_router)
@@ -51,106 +80,174 @@ def create_app() -> FastAPI:
     app.include_router(search_router)
     app.include_router(chat_router)
     app.include_router(drafts_router)
+    app.include_router(jobs_router)
+
+    def error_response(request: Request, status_code: int, code: str, message: str) -> JSONResponse:
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "error": {
+                    "code": code,
+                    "message": message,
+                    "request_id": getattr(request.state, "request_id", ""),
+                }
+            },
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(
+        request: Request, _exc: RequestValidationError
+    ) -> JSONResponse:
+        return error_response(request, 422, "VALIDATION_ERROR", "Request validation failed.")
+
+    @app.exception_handler(HTTPException)
+    async def http_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        message = str(exc.detail) if isinstance(exc.detail, str) else "The request could not be completed."
+        return error_response(request, exc.status_code, "HTTP_ERROR", message)
 
     @app.exception_handler(ConfigurationError)
     async def configuration_error_handler(
-        _request: Request, exc: ConfigurationError
+        request: Request, exc: ConfigurationError
     ) -> JSONResponse:
-        return JSONResponse(status_code=503, content={"detail": str(exc)})
+        return error_response(request, 503, "CONFIGURATION_ERROR", str(exc))
 
     @app.exception_handler(GmailNotConnectedError)
     async def gmail_not_connected_handler(
-        _request: Request, exc: GmailNotConnectedError
+        request: Request, exc: GmailNotConnectedError
     ) -> JSONResponse:
-        return JSONResponse(status_code=401, content={"detail": str(exc)})
+        return error_response(request, 401, "GMAIL_NOT_CONNECTED", str(exc))
 
     @app.exception_handler(GmailRateLimitError)
     async def gmail_rate_limit_handler(
-        _request: Request, exc: GmailRateLimitError
+        request: Request, exc: GmailRateLimitError
     ) -> JSONResponse:
-        return JSONResponse(status_code=429, content={"detail": str(exc)})
+        return error_response(request, 429, "GMAIL_RATE_LIMIT", str(exc))
 
     @app.exception_handler(GmailOAuthError)
     async def gmail_oauth_error_handler(
-        _request: Request, exc: GmailOAuthError
+        request: Request, exc: GmailOAuthError
     ) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": str(exc)})
+        return error_response(request, 400, "GMAIL_OAUTH_ERROR", str(exc))
 
     @app.exception_handler(GmailParseError)
     async def gmail_parse_error_handler(
-        _request: Request, exc: GmailParseError
+        request: Request, exc: GmailParseError
     ) -> JSONResponse:
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+        return error_response(request, 422, "GMAIL_PARSE_ERROR", str(exc))
 
     @app.exception_handler(GmailAPIError)
     async def gmail_api_error_handler(
-        _request: Request, exc: GmailAPIError
+        request: Request, exc: GmailAPIError
     ) -> JSONResponse:
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+        return error_response(request, 502, "GMAIL_API_ERROR", str(exc))
 
     @app.exception_handler(RecordNotFoundError)
     async def record_not_found_handler(
-        _request: Request, exc: RecordNotFoundError
+        request: Request, exc: RecordNotFoundError
     ) -> JSONResponse:
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
+        return error_response(request, 404, "NOT_FOUND", str(exc))
 
     @app.exception_handler(DatabaseUnavailableError)
     async def database_unavailable_handler(
-        _request: Request, exc: DatabaseUnavailableError
+        request: Request, exc: DatabaseUnavailableError
     ) -> JSONResponse:
-        return JSONResponse(status_code=503, content={"detail": str(exc)})
+        return error_response(request, 503, "DATABASE_UNAVAILABLE", str(exc))
 
     @app.exception_handler(PersistenceError)
     async def persistence_error_handler(
-        _request: Request, exc: PersistenceError
+        request: Request, exc: PersistenceError
     ) -> JSONResponse:
-        return JSONResponse(status_code=500, content={"detail": str(exc)})
+        return error_response(request, 500, "PERSISTENCE_ERROR", str(exc))
 
     @app.exception_handler(VectorStoreError)
     async def vector_store_error_handler(
-        _request: Request, exc: VectorStoreError
+        request: Request, exc: VectorStoreError
     ) -> JSONResponse:
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+        return error_response(request, 502, "VECTOR_STORE_ERROR", str(exc))
 
     @app.exception_handler(RAGGenerationError)
     async def rag_generation_error_handler(
-        _request: Request, exc: RAGGenerationError
+        request: Request, exc: RAGGenerationError
     ) -> JSONResponse:
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+        return error_response(request, 502, "RAG_GENERATION_ERROR", str(exc))
 
     @app.exception_handler(QueryRoutingError)
     async def query_routing_error_handler(
-        _request: Request, exc: QueryRoutingError
+        request: Request, exc: QueryRoutingError
     ) -> JSONResponse:
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+        return error_response(request, 502, "QUERY_ROUTING_ERROR", str(exc))
 
     @app.exception_handler(ReplyGenerationError)
     async def reply_generation_error_handler(
-        _request: Request, exc: ReplyGenerationError
+        request: Request, exc: ReplyGenerationError
     ) -> JSONResponse:
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+        return error_response(request, 502, "REPLY_GENERATION_ERROR", str(exc))
 
     @app.exception_handler(DraftConflictError)
     async def draft_conflict_error_handler(
-        _request: Request, exc: DraftConflictError
+        request: Request, exc: DraftConflictError
     ) -> JSONResponse:
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+        return error_response(request, 409, "DRAFT_CONFLICT", str(exc))
 
     @app.exception_handler(DraftUnsafeError)
     async def draft_unsafe_error_handler(
-        _request: Request, exc: DraftUnsafeError
+        request: Request, exc: DraftUnsafeError
     ) -> JSONResponse:
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+        return error_response(request, 422, "DRAFT_UNSAFE", str(exc))
 
     @app.exception_handler(ThreadContextError)
     async def thread_context_error_handler(
-        _request: Request, exc: ThreadContextError
+        request: Request, exc: ThreadContextError
     ) -> JSONResponse:
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+        return error_response(request, 422, "THREAD_CONTEXT_ERROR", str(exc))
+
+    @app.exception_handler(JobQueueUnavailableError)
+    async def job_queue_unavailable_handler(
+        request: Request, exc: JobQueueUnavailableError
+    ) -> JSONResponse:
+        return error_response(request, 503, "JOB_QUEUE_UNAVAILABLE", str(exc))
+
+    @app.exception_handler(JobNotFoundError)
+    async def job_not_found_handler(
+        request: Request, exc: JobNotFoundError
+    ) -> JSONResponse:
+        return error_response(request, 404, "JOB_NOT_FOUND", str(exc))
+
+    @app.exception_handler(Exception)
+    async def unexpected_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception(
+            "event=unhandled_api_error request_id=%s",
+            getattr(request.state, "request_id", ""),
+            exc_info=exc,
+        )
+        return error_response(
+            request,
+            500,
+            "INTERNAL_ERROR",
+            "The server could not complete the request.",
+        )
 
     @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/health/ready", tags=["health"])
+    def readiness() -> JSONResponse:
+        dependencies = {"postgresql": "ok", "redis": "ok"}
+        try:
+            with get_engine().connect() as connection:
+                connection.execute(text("SELECT 1"))
+        except Exception:
+            dependencies["postgresql"] = "unavailable"
+        try:
+            get_redis_client().ping()
+        except Exception:
+            dependencies["redis"] = "unavailable"
+        ready = all(value == "ok" for value in dependencies.values())
+        return JSONResponse(
+            status_code=200 if ready else 503,
+            content={"status": "ready" if ready else "not_ready", "dependencies": dependencies},
+        )
 
     return app
 

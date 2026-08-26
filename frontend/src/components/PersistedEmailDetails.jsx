@@ -41,5 +41,5 @@ function toLegacyDetail(email) {
 
 export default function PersistedEmailDetails({ email, onClose }) {
   const [drafting, setDrafting] = useState(false)
-  return <><GmailEmailDetails item={toLegacyDetail(email)} onClose={onClose} onDraftReply={() => setDrafting(true)} />{drafting && <DraftReplyPanel email={email} onClose={() => setDrafting(false)} />}</>
+  return <><GmailEmailDetails item={toLegacyDetail(email)} onClose={onClose} onDraftReply={email.processing_status === 'processed' ? () => setDrafting(true) : undefined} />{drafting && <DraftReplyPanel email={email} onClose={() => setDrafting(false)} />}</>
 }

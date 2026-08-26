@@ -66,6 +66,10 @@ class PersistedEmail(ORMResponse):
     summary: str
     classification: Classification
     reply_required: bool
+    processing_status: str
+    processing_error: str | None
+    processing_attempts: int
+    vector_status: str
     tasks: list[PersistedTask]
     meeting: PersistedMeeting | None
     entities: list[PersistedEntity]

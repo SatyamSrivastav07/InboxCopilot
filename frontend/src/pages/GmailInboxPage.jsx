@@ -3,7 +3,37 @@ import { useSearchParams } from 'react-router-dom'
 
 import GmailEmailCard from '../components/GmailEmailCard.jsx'
 import GmailEmailDetails from '../components/GmailEmailDetails.jsx'
-import { getGmailAuthUrl, getGmailStatus, syncGmailInbox } from '../services/api.js'
+import { getGmailAuthUrl, getGmailStatus, getJobStatus, getPersistedEmails, syncGmailInbox } from '../services/api.js'
+
+function persistedToSyncItem(email) {
+  const grouped = { people: [], organizations: [], dates: [], locations: [] }
+  const keys = { person: 'people', organization: 'organizations', date: 'dates', location: 'locations' }
+  email.entities.forEach((entity) => grouped[keys[entity.entity_type]]?.push(entity.entity_value))
+  return {
+    message_id: email.gmail_message_id,
+    source: 'cached',
+    gmail: {
+      message_id: email.gmail_message_id,
+      thread_id: email.gmail_thread_id,
+      sender: email.sender,
+      recipients: email.recipients,
+      subject: email.subject,
+      body: email.body_original,
+      received_at: email.received_at,
+      labels: email.labels,
+    },
+    analysis: {
+      sender: email.sender,
+      subject: email.subject,
+      summary: email.summary,
+      classification: email.classification,
+      tasks: email.tasks,
+      meeting: email.meeting,
+      entities: grouped,
+      reply_required: email.reply_required,
+    },
+  }
+}
 
 export default function GmailInboxPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -14,6 +44,7 @@ export default function GmailInboxPage() {
   const [selected, setSelected] = useState(null)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [syncJob, setSyncJob] = useState(null)
   const [error, setError] = useState('')
 
   const callbackStatus = searchParams.get('gmail')
@@ -32,6 +63,47 @@ export default function GmailInboxPage() {
     return () => { active = false }
   }, [])
 
+  useEffect(() => {
+    if (!syncJob?.job_id || !['queued', 'running'].includes(syncJob.status)) return undefined
+    let active = true
+    let timer
+    const poll = async () => {
+      try {
+        const next = await getJobStatus(syncJob.job_id)
+        if (!active) return
+        setSyncJob(next)
+        if (['completed', 'partial_success'].includes(next.status)) {
+          const emails = await getPersistedEmails({ limit, offset: 0 })
+          if (!active) return
+          setSyncResult({
+            count: next.result?.total || emails.length,
+            analyzed_count: (next.result?.processed || 0) + (next.result?.cached || 0),
+            failed_count: next.result?.failed || 0,
+            emails: emails.map(persistedToSyncItem),
+          })
+          setIsSyncing(false)
+          return
+        }
+        if (next.status === 'failed') {
+          setError(next.error || 'Inbox sync failed. You can retry safely.')
+          setIsSyncing(false)
+          return
+        }
+        timer = window.setTimeout(poll, 1000)
+      } catch (requestError) {
+        if (active) {
+          setError(requestError.message)
+          setIsSyncing(false)
+        }
+      }
+    }
+    poll()
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [syncJob?.job_id, syncJob?.status, limit])
+
   const connect = async () => {
     setIsConnecting(true)
     setError('')
@@ -48,7 +120,8 @@ export default function GmailInboxPage() {
     setError('')
     setSyncResult(null)
     try {
-      setSyncResult(await syncGmailInbox({ limit, unread_only: unreadOnly }))
+      const queued = await syncGmailInbox({ limit, unread_only: unreadOnly })
+      setSyncJob({ ...queued, progress: { total: limit, processed: 0, failed: 0 } })
     } catch (requestError) {
       setError(requestError.message)
       if (requestError.message.toLowerCase().includes('not connected')) {
@@ -118,7 +191,13 @@ export default function GmailInboxPage() {
 
       {isSyncing && (
         <div className="card mt-6 flex min-h-48 items-center justify-center text-center" aria-live="polite">
-          <div><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" /><p className="mt-4 font-semibold">Syncing and analyzing inbox…</p><p className="mt-1 text-sm text-slate-500">Each email is processed safely in sequence. This may take a few minutes.</p></div>
+          <div><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" /><p className="mt-4 font-semibold">Syncing inbox in the background…</p><p className="mt-2 text-lg font-bold text-indigo-700">{syncJob?.progress?.processed || 0} / {syncJob?.progress?.total || limit} emails processed</p><p className="mt-1 text-sm text-slate-500">You can navigate elsewhere; the worker will continue safely.</p>{syncJob?.reused && <p className="mt-2 text-xs text-amber-700">An existing sync job is already running, so it was reused.</p>}</div>
+        </div>
+      )}
+
+      {!isSyncing && syncJob?.status === 'partial_success' && (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+          Sync completed with partial success: {syncJob.result?.processed || 0} processed, {syncJob.result?.cached || 0} cached, and {syncJob.result?.failed || 0} failed. Retry Sync is safe.
         </div>
       )}
 

@@ -1,7 +1,10 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from redis.exceptions import RedisError
 
+from app.cache.dependencies import get_cache_service
+from app.cache.service import CacheService
 from app.schemas.draft import DraftSendResponse, DraftUpdate, ReplyDraft, ReplyDraftRequest
 from app.services.dependencies import get_reply_service
 from app.services.reply_service import ReplyService
@@ -47,5 +50,11 @@ def approve_reply_draft(
 def send_reply_draft(
     draft_id: int,
     service: Annotated[ReplyService, Depends(get_reply_service)],
+    cache: Annotated[CacheService, Depends(get_cache_service)],
 ) -> DraftSendResponse:
-    return service.send(draft_id)
+    result = service.send(draft_id)
+    try:
+        cache.invalidate_inbox_summaries()
+    except RedisError:
+        pass
+    return result

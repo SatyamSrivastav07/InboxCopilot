@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -34,6 +34,17 @@ class EmailRecord(Base):
     classification_reason: Mapped[str] = mapped_column(Text)
     summary: Mapped[str] = mapped_column(Text)
     reply_required: Mapped[bool] = mapped_column(Boolean, index=True)
+
+    processing_status: Mapped[str] = mapped_column(
+        String(20), default="processed", server_default="processed", index=True
+    )
+    processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processing_attempts: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1"
+    )
+    vector_status: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending", index=True
+    )
 
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

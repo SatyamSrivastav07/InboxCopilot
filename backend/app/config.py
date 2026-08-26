@@ -31,6 +31,12 @@ class Settings:
     email_chunk_overlap: int = 100
     reply_thread_max_chars: int = 12_000
     reply_thread_recent_messages: int = 8
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/1"
+    cache_ttl_seconds: int = 60
+    genai_max_retries: int = 3
+    sync_lock_ttl_seconds: int = 30 * 60
 
     def require_mistral_api_key(self) -> str:
         if not self.mistral_api_key:
@@ -92,4 +98,14 @@ def get_settings() -> Settings:
         reply_thread_recent_messages=int(
             os.getenv("REPLY_THREAD_RECENT_MESSAGES", "8")
         ),
+        redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+        celery_broker_url=os.getenv(
+            "CELERY_BROKER_URL", "redis://localhost:6379/0"
+        ),
+        celery_result_backend=os.getenv(
+            "CELERY_RESULT_BACKEND", "redis://localhost:6379/1"
+        ),
+        cache_ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "60")),
+        genai_max_retries=int(os.getenv("GENAI_MAX_RETRIES", "3")),
+        sync_lock_ttl_seconds=int(os.getenv("SYNC_LOCK_TTL_SECONDS", "1800")),
     )

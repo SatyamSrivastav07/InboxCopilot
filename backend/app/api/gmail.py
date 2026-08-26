@@ -4,7 +4,7 @@ import logging
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
@@ -18,10 +18,11 @@ from app.gmail.schemas import (
     GmailEmail,
     GmailStatus,
     GmailSyncRequest,
-    GmailSyncResponse,
 )
-from app.services.dependencies import get_gmail_sync_service
-from app.services.gmail_sync import GmailSyncService
+from app.cache.keys import SYNC_LOCK_KEY
+from app.schemas.jobs import JobQueued
+from app.services.job_dependencies import get_job_service
+from app.services.jobs import JobService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/gmail", tags=["gmail"])
@@ -96,9 +97,15 @@ def gmail_email(
     return parse_gmail_message(fetcher.fetch_message(message_id))
 
 
-@router.post("/sync", response_model=GmailSyncResponse)
+@router.post("/sync", response_model=JobQueued, status_code=202)
 def sync_gmail(
     request: GmailSyncRequest,
-    sync_service: Annotated[GmailSyncService, Depends(get_gmail_sync_service)],
-) -> GmailSyncResponse:
-    return sync_service.sync(request)
+    http_request: Request,
+    jobs: Annotated[JobService, Depends(get_job_service)],
+) -> JobQueued:
+    return jobs.enqueue(
+        "app.workers.gmail_tasks.sync_gmail",
+        kwargs={"limit": request.limit, "unread_only": request.unread_only},
+        lock_key=SYNC_LOCK_KEY,
+        request_id=getattr(http_request.state, "request_id", None),
+    )

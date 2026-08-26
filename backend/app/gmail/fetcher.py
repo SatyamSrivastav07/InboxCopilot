@@ -7,7 +7,7 @@ from typing import Any
 from googleapiclient.discovery import Resource
 from googleapiclient.errors import HttpError
 
-from app.gmail.errors import GmailAPIError, GmailRateLimitError
+from app.gmail.errors import GmailAPIError, GmailMessageNotFoundError, GmailRateLimitError
 
 
 def translate_http_error(exc: HttpError) -> GmailAPIError:
@@ -39,9 +39,17 @@ def translate_http_error(exc: HttpError) -> GmailAPIError:
         "quotaExceeded",
     }
     if status_code == 429 or reasons.intersection(rate_limit_reasons):
+        retry_after = None
+        try:
+            retry_after = float(exc.resp.get("retry-after"))
+        except (AttributeError, TypeError, ValueError):
+            pass
         return GmailRateLimitError(
-            "Gmail rate limit or quota was reached. Wait a moment and try again."
+            "Gmail rate limit or quota was reached. Wait a moment and try again.",
+            retry_after=retry_after,
         )
+    if status_code == 404:
+        return GmailMessageNotFoundError("The Gmail message no longer exists.")
     return GmailAPIError("The Gmail API is unavailable. Please try again.")
 
 

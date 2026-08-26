@@ -1,4 +1,150 @@
-# AI Inbox Copilot — Phase 6
+# AI Inbox Copilot — Phase 7
+
+Phase 7 adds production-style reliability without adding full deployment packaging. Gmail sync, failed-email reprocessing, and full Chroma reindexing now run as Celery jobs backed by Redis. FastAPI returns immediately with a job ID, React polls progress, PostgreSQL remains the source of truth, and Chroma failures no longer roll back persisted email data.
+
+## Phase 7 architecture
+
+```text
+React -> FastAPI -> Redis/Celery broker -> Celery worker
+                                      ├── Gmail fetch + duplicate guard
+                                      ├── Mistral analysis + bounded retries
+                                      ├── PostgreSQL persistence
+                                      └── Chroma embedding/indexing
+
+React <- GET /api/jobs/{job_id} <- Celery result metadata
+Dashboard <- selective 60-second Redis cache <- PostgreSQL
+```
+
+Celery tasks contain orchestration only; existing services retain the business logic. Worker tasks receive JSON-safe IDs and primitive values, create their own SQLAlchemy sessions, and never receive live sessions, ORM objects, Gmail clients, or LangChain objects.
+
+### Created Phase 7 modules
+
+```text
+backend/app/
+├── api/jobs.py
+├── cache/{client.py,dependencies.py,keys.py,service.py}
+├── core/{logging.py,metrics.py,retry.py}
+├── schemas/jobs.py
+├── services/{job_dependencies.py,jobs.py}
+└── workers/{celery_app.py,gmail_tasks.py,indexing_tasks.py,maintenance_tasks.py}
+backend/alembic/versions/0003_processing_reliability.py
+backend/tests/test_phase7_reliability.py
+```
+
+The migration adds `processing_status`, `processing_error`, `processing_attempts`, and `vector_status` to `emails`. Processing states are `pending`, `processed`, or `failed`; vector states are `pending`, `indexed`, or `failed`. Failure messages are bounded and safe—stack traces remain only in worker logs.
+
+### New dependencies and environment
+
+```text
+celery>=5.4,<6.0
+redis>=5.2,<7.0
+tenacity>=9.0,<10.0
+```
+
+```dotenv
+REDIS_URL=redis://localhost:6379/0
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/1
+CACHE_TTL_SECONDS=60
+GENAI_MAX_RETRIES=3
+SYNC_LOCK_TTL_SECONDS=1800
+```
+
+### Job lifecycle, retries, and partial failures
+
+`POST /api/gmail/sync` returns HTTP 202 with `{job_id,status:"queued"}`. A Redis lock returns the active job for repeated clicks rather than creating a sync storm. The worker lists Gmail IDs, checks the unique `gmail_message_id`, fetches/parses, analyzes, persists, indexes, and updates progress after every item. Completion is `completed`, `partial_success`, or `failed`; Celery results contain only counts and safe failed-item identifiers, never private email bodies.
+
+Transient Gmail/Mistral/network/embedding failures retry at most three attempts with exponential 2/4/8-second-style backoff, jitter, and Gmail `Retry-After` support. Invalid OAuth, missing configuration, malformed input, validation errors, and deleted Gmail messages do not retry. Work is sequential inside each sync task and local worker concurrency is deliberately conservative.
+
+PostgreSQL's Gmail ID unique constraint is the final race guard. A row is reserved before analysis. Analysis failure leaves the raw email with a safe failed state. If PostgreSQL succeeds but embedding fails, the email remains `processed` with `vector_status=failed`; reprocess/reindex can retry it later.
+
+Redis caches only small dashboard counts (default TTL 60 seconds), job metadata, and coordination locks. It does not cache bodies, OAuth tokens, reply drafts, or semantic answers. Dashboard cache invalidates after sync/reprocess, task completion changes, and draft send.
+
+Every API response includes `X-Request-ID`; job headers preserve that correlation ID. Logs use stable fields such as `event`, `request_id`, `job_id`, `email_id`, `gmail_message_id`, `duration_ms`, and `status` without email bodies. `/health` checks FastAPI only; `/health/ready` checks PostgreSQL and Redis without calling Gmail or Mistral.
+
+### Phase 7 APIs
+
+```text
+POST /api/gmail/sync                 -> queued job
+GET  /api/jobs/{job_id}              -> progress/result
+POST /api/emails/{email_id}/reprocess -> queued job
+POST /api/search/reindex             -> queued job
+GET  /health
+GET  /health/ready
+```
+
+### Exact local run commands (Windows PowerShell)
+
+Terminal 1 — PostgreSQL (if it is not already running; service name varies):
+
+```powershell
+Get-Service -Name 'postgresql*' | Start-Service
+```
+
+Terminal 2 — Redis only through Docker Desktop:
+
+```powershell
+docker run --name inbox-copilot-redis -p 6379:6379 -d redis:7-alpine
+```
+
+For later runs, use `docker start inbox-copilot-redis` instead of creating it again.
+
+Terminal 3 — FastAPI and migration:
+
+```powershell
+cd C:\Users\Redmi\Desktop\AI_IN_BOX\ai-inbox-copilot\backend
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+```
+
+Terminal 4 — Celery worker. Celery's safe native-Windows pool is `solo`, so it processes one external-API-heavy job at a time:
+
+```powershell
+cd C:\Users\Redmi\Desktop\AI_IN_BOX\ai-inbox-copilot\backend
+.\.venv\Scripts\Activate.ps1
+celery -A app.workers.celery_app:celery_app worker --loglevel=info --pool=solo
+```
+
+On Linux/WSL, the recommended ceiling is `--concurrency=2`.
+
+Terminal 5 — React:
+
+```powershell
+cd C:\Users\Redmi\Desktop\AI_IN_BOX\ai-inbox-copilot\frontend
+npm run dev
+```
+
+### Exact background-job test
+
+```powershell
+$sync = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/gmail/sync -ContentType application/json -Body '{"limit":10,"unread_only":false}'
+$sync
+do {
+  Start-Sleep -Seconds 1
+  $job = Invoke-RestMethod -Uri "http://localhost:8000/api/jobs/$($sync.job_id)"
+  $job | ConvertTo-Json -Depth 6
+} while ($job.status -in @('queued','running'))
+
+$duplicate1 = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/gmail/sync -ContentType application/json -Body '{"limit":10,"unread_only":false}'
+$duplicate2 = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/gmail/sync -ContentType application/json -Body '{"limit":10,"unread_only":false}'
+$duplicate1
+$duplicate2 # same job_id with reused=true while the first job is active
+```
+
+After completion, sync again and confirm previously persisted Gmail IDs count as `cached` and are not analyzed twice. Inspect states with:
+
+```sql
+SELECT id, gmail_message_id, processing_status, processing_attempts, vector_status
+FROM emails ORDER BY id DESC LIMIT 20;
+```
+
+Phase 7 limitations: local single-account OAuth/token storage, local Chroma, Redis/Celery services must be started separately, no periodic sync schedule, no background Gmail send, and no full Docker Compose, CI/CD, Nginx, HTTPS, secrets manager, Prometheus/Grafana, cloud deployment, or multi-user isolation. Those are Phase 8 concerns.
+
+---
+
+## Phase 6 reference
 
 AI Inbox Copilot now adds thread-aware reply drafting with a mandatory human approval gate and minimal Gmail send permission. PostgreSQL stores both the AI-generated text and the exact user-approved text. The system never sends during generation.
 
@@ -77,7 +223,7 @@ alembic upgrade head
 alembic current
 ```
 
-Expected head: `0002_email_drafts`. The table stores source IDs/thread IDs, recipient, reply headers, tone/instruction, `generated_body`, `edited_body`, status, safety notes, failure state, Gmail sent ID, and timestamps.
+Expected head for a Phase 7 checkout: `0003_processing_reliability`. Migration `0002_email_drafts` stores source IDs/thread IDs, recipient, reply headers, tone/instruction, `generated_body`, `edited_body`, status, safety notes, failure state, Gmail sent ID, and timestamps.
 
 `generated_body` is immutable AI output. `edited_body` is the current user-controlled text. Editing an approved draft resets it to `draft`; Gmail send always reads `edited_body` and never `generated_body`.
 
@@ -298,7 +444,7 @@ Rebuild Chroma from PostgreSQL:
 Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/search/reindex
 ```
 
-Example: `{"emails_indexed":100,"emails_skipped":0,"chunks_created":237}`.
+This now returns a queued job ID. Poll `GET /api/jobs/{job_id}` for indexed/failed counts and chunk totals.
 
 Retrieval-only semantic search (no chat-model call):
 
@@ -405,13 +551,13 @@ Tests use SQLite, ephemeral Chroma, fake embeddings, fake reply generation, and 
 ## Limitations
 
 - Single-user local Chroma collection; future user isolation is not implemented.
-- Gmail sync is still an explicit UI/API action. Phase 4 indexes automatically during sync but adds no scheduled/background polling because that is outside this phase.
+- Gmail sync remains an explicit UI/API action, but Phase 7 executes it in a Celery worker and reports progress through the job API. Automatic periodic scheduling is intentionally deferred.
 - Semantic retrieval uses cosine similarity; hybrid routing combines it with safe structured repository queries but does not implement arbitrary SQL generation or a general SQL query planner.
 - Direct out-of-app PostgreSQL changes can leave stale vectors until reindex.
 - Reply is single-recipient only; Reply All is intentionally absent.
 - Attachments cannot be sent. Attachment requests are warnings and attachment claims are blocked.
 - Draft generation requires the Gmail thread to remain available and OAuth to contain both minimal scopes.
-- No background send queue, scheduled retry, advanced monitoring, multi-user authentication, or production deployment.
+- No background send queue, periodic scheduler, external metrics stack, multi-user authentication, or production deployment.
 - Gmail send and PostgreSQL commit are separate external systems; an extremely narrow crash after Gmail accepts a message but before local status commit requires manual reconciliation.
 
-Phase 6 stops here. Phase 7 infrastructure and production features are intentionally excluded.
+Phase 7 stops here. Phase 8 deployment and production packaging are intentionally excluded.

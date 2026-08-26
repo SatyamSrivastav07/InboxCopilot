@@ -2,8 +2,10 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.schemas.query import RoutedInboxResponse
-from app.schemas.search import InboxSource, ReindexResponse
-from app.services.dependencies import get_inbox_query_workflow, get_reindex_service
+from app.schemas.search import InboxSource
+from app.schemas.jobs import JobQueued
+from app.services.dependencies import get_inbox_query_workflow
+from app.services.job_dependencies import get_job_service
 from app.vectorstore.dependencies import get_vector_retriever
 from app.vectorstore.retriever import RetrievedEmail
 
@@ -50,9 +52,10 @@ class StubWorkflow:
         )
 
 
-class StubReindexService:
-    def reindex_all(self):
-        return ReindexResponse(emails_indexed=2, emails_skipped=0, chunks_created=5)
+class StubJobs:
+    def enqueue(self, task_name, **options):
+        assert task_name == "app.workers.indexing_tasks.reindex_inbox"
+        return JobQueued(job_id="reindex-job")
 
 
 def test_semantic_search_api_returns_citable_email():
@@ -85,16 +88,12 @@ def test_inbox_chat_api_returns_answer_and_sources():
     assert response.json()["route"] == "semantic"
 
 
-def test_reindex_api_reports_rebuilt_collection():
-    app.dependency_overrides[get_reindex_service] = lambda: StubReindexService()
+def test_reindex_api_queues_background_job():
+    app.dependency_overrides[get_job_service] = lambda: StubJobs()
     try:
         response = TestClient(app).post("/api/search/reindex")
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    assert response.json() == {
-        "emails_indexed": 2,
-        "emails_skipped": 0,
-        "chunks_created": 5,
-    }
+    assert response.status_code == 202
+    assert response.json()["job_id"] == "reindex-job"

@@ -2,7 +2,10 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from redis.exceptions import RedisError
 
+from app.cache.dependencies import get_cache_service
+from app.cache.service import CacheService
 from app.schemas.email import Priority
 from app.schemas.persistence import PersistedTask, TaskUpdate
 from app.services.dependencies import get_inbox_query_service
@@ -34,6 +37,11 @@ def update_task(
     task_id: int,
     update: TaskUpdate,
     service: Annotated[InboxQueryService, Depends(get_inbox_query_service)],
+    cache: Annotated[CacheService, Depends(get_cache_service)],
 ) -> PersistedTask:
-    return service.update_task(task_id, update.completed)
-
+    result = service.update_task(task_id, update.completed)
+    try:
+        cache.invalidate_inbox_summaries()
+    except RedisError:
+        pass
+    return result

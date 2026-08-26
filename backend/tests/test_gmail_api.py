@@ -11,9 +11,13 @@ from app.database.dependencies import get_db
 from app.gmail.auth import GMAIL_READONLY_SCOPE, GMAIL_SCOPES, GMAIL_SEND_SCOPE, GmailAuthService
 from app.gmail.dependencies import get_gmail_auth_service, get_gmail_fetcher
 from app.gmail.parser import parse_gmail_message
+from app.gmail.schemas import GmailSyncRequest
 from app.main import app
 from app.schemas.email import EmailAnalysis, EmailInput
 from app.services.email_persistence import EmailPersistenceService
+from app.services.gmail_sync import GmailSyncService
+from app.services.job_dependencies import get_job_service
+from app.schemas.jobs import JobQueued
 from app.vectorstore.dependencies import get_vector_indexer
 from app.vectorstore.indexer import IndexResult
 
@@ -89,6 +93,15 @@ class ConnectedAuth:
         return Mock(scopes=list(GMAIL_SCOPES))
 
 
+class StubJobs:
+    def __init__(self):
+        self.calls = []
+
+    def enqueue(self, task_name, **options):
+        self.calls.append((task_name, options))
+        return JobQueued(job_id="queued-job")
+
+
 def test_gmail_scope_is_read_only():
     assert GMAIL_READONLY_SCOPE == "https://www.googleapis.com/auth/gmail.readonly"
 
@@ -136,11 +149,9 @@ def test_gmail_status_reports_read_and_send_capabilities():
     }
 
 
-def test_sync_continues_when_individual_messages_fail(override_db):
-    app.dependency_overrides[get_gmail_fetcher] = lambda: StubFetcher()
-    app.dependency_overrides[get_email_analyzer] = lambda: PartiallyFailingAnalyzer()
-    app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_vector_indexer] = lambda: StubIndexer()
+def test_sync_queues_background_job_instead_of_blocking():
+    jobs = StubJobs()
+    app.dependency_overrides[get_job_service] = lambda: jobs
     try:
         response = TestClient(app).post(
             "/api/gmail/sync", json={"limit": 5, "unread_only": True}
@@ -148,14 +159,10 @@ def test_sync_continues_when_individual_messages_fail(override_db):
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["count"] == 3
-    assert data["analyzed_count"] == 1
-    assert data["failed_count"] == 2
-    assert data["emails"][0]["analysis"]["summary"] == "Review is requested today."
-    assert data["emails"][1]["error"] == "Email body is empty; AI analysis was skipped."
-    assert data["emails"][2]["error"] == "Analysis failed."
+    assert response.status_code == 202
+    assert response.json() == {"job_id": "queued-job", "status": "queued", "reused": False}
+    assert jobs.calls[0][0] == "app.workers.gmail_tasks.sync_gmail"
+    assert jobs.calls[0][1]["kwargs"] == {"limit": 5, "unread_only": True}
 
 
 def test_sync_rejects_unbounded_limit(override_db):
@@ -178,19 +185,11 @@ def test_cached_sync_does_not_call_analyzer(db_session, override_db):
     analyzer = Mock()
     analyzer.analyze.side_effect = AssertionError("Mistral must not run for cached email")
 
-    app.dependency_overrides[get_gmail_fetcher] = lambda: CachedFetcher()
-    app.dependency_overrides[get_email_analyzer] = lambda: analyzer
-    app.dependency_overrides[get_db] = override_db
     indexer = StubIndexer()
-    app.dependency_overrides[get_vector_indexer] = lambda: indexer
-    try:
-        response = TestClient(app).post(
-            "/api/gmail/sync", json={"limit": 5, "unread_only": False}
-        )
-    finally:
-        app.dependency_overrides.clear()
+    result = GmailSyncService(
+        CachedFetcher(), analyzer, EmailPersistenceService(db_session), indexer
+    ).sync(GmailSyncRequest(limit=5, unread_only=False))
 
-    assert response.status_code == 200
-    assert response.json()["emails"][0]["source"] == "cached"
+    assert result.emails[0].source == "cached"
     analyzer.analyze.assert_not_called()
     assert indexer.indexed_ids

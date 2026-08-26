@@ -71,6 +71,10 @@ def email_response(record: EmailRecord) -> PersistedEmail:
             "reason": record.classification_reason,
         },
         reply_required=record.reply_required,
+        processing_status=record.processing_status,
+        processing_error=record.processing_error,
+        processing_attempts=record.processing_attempts,
+        vector_status=record.vector_status,
         tasks=[task_response(task) for task in record.tasks],
         meeting=meeting_response(record.meeting) if record.meeting else None,
         entities=[PersistedEntity.model_validate(entity) for entity in record.entities],
@@ -140,4 +144,3 @@ def record_to_analysis(record: EmailRecord) -> EmailAnalysis:
         ),
         reply_required=record.reply_required,
     )
-

@@ -7,6 +7,10 @@ const api = axios.create({
 })
 
 function apiError(error, fallback) {
+  const structuredMessage = error.response?.data?.error?.message
+  if (typeof structuredMessage === 'string') {
+    return new Error(structuredMessage)
+  }
   const detail = error.response?.data?.detail
   if (typeof detail === 'string') {
     return new Error(detail)
@@ -46,10 +50,37 @@ export async function getGmailAuthUrl() {
 
 export async function syncGmailInbox(options) {
   try {
-    const { data } = await api.post('/api/gmail/sync', options, { timeout: 10 * 60_000 })
+    const { data } = await api.post('/api/gmail/sync', options)
     return data
   } catch (error) {
     throw apiError(error, 'Could not sync the Gmail inbox.')
+  }
+}
+
+export async function getJobStatus(jobId) {
+  try {
+    const { data } = await api.get(`/api/jobs/${jobId}`)
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not load background job progress.')
+  }
+}
+
+export async function reprocessEmail(emailId) {
+  try {
+    const { data } = await api.post(`/api/emails/${emailId}/reprocess`)
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not queue email reprocessing.')
+  }
+}
+
+export async function queueInboxReindex() {
+  try {
+    const { data } = await api.post('/api/search/reindex')
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not queue inbox reindexing.')
   }
 }
 
