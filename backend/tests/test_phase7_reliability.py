@@ -141,6 +141,21 @@ def test_duplicate_sync_returns_existing_running_job():
     assert len(celery.sent) == 1
 
 
+def test_stale_pending_sync_lock_is_replaced_with_a_new_job():
+    redis = FakeRedis()
+    celery = FakeCelery()
+    redis.set("lock:sync", "lost-job")
+    redis.setex("job:known:lost-job", 60, "1")
+    jobs = JobService(celery, redis)
+
+    queued = jobs.enqueue("sync", lock_key="lock:sync")
+
+    assert queued.job_id != "lost-job"
+    assert queued.reused is False
+    assert redis.get("lock:sync") == queued.job_id
+    assert len(celery.sent) == 1
+
+
 def test_job_status_endpoint_reports_progress():
     redis = FakeRedis()
     celery = FakeCelery()

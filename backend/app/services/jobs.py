@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import time
 from uuid import uuid4
 
 from celery import Celery
@@ -19,6 +20,11 @@ class JobNotFoundError(RuntimeError):
 
 
 ACTIVE_STATES = {"PENDING", "RECEIVED", "STARTED", "RETRY"}
+JOB_KNOWN_TTL_SECONDS = 24 * 60 * 60
+
+
+def _queued_timestamp_key(job_id: str) -> str:
+    return f"job:queued-at:{job_id}"
 
 
 class JobService:
@@ -37,10 +43,10 @@ class JobService:
         try:
             if lock_key:
                 existing_id = self.redis.get(lock_key)
-                if existing_id and self.celery.AsyncResult(existing_id).state in ACTIVE_STATES:
+                if existing_id and self._can_reuse_locked_job(existing_id):
                     return JobQueued(job_id=existing_id, reused=True)
                 if existing_id:
-                    self.redis.delete(lock_key)
+                    self._discard_stale_job(lock_key, existing_id)
 
             job_id = str(uuid4())
             if lock_key and not self.redis.set(
@@ -54,7 +60,8 @@ class JobService:
                     return JobQueued(job_id=existing_id, reused=True)
                 raise JobQueueUnavailableError("Could not acquire the background job lock.")
             try:
-                self.redis.setex(f"job:known:{job_id}", 24 * 60 * 60, "1")
+                self.redis.setex(f"job:known:{job_id}", JOB_KNOWN_TTL_SECONDS, "1")
+                self.redis.setex(_queued_timestamp_key(job_id), JOB_KNOWN_TTL_SECONDS, str(time()))
                 self.celery.send_task(
                     task_name,
                     kwargs=kwargs or {},
@@ -62,7 +69,7 @@ class JobService:
                     headers={"request_id": request_id or ""},
                 )
             except Exception:
-                self.redis.delete(f"job:known:{job_id}")
+                self.redis.delete(f"job:known:{job_id}", _queued_timestamp_key(job_id))
                 if lock_key:
                     self._release_owned_lock(lock_key, job_id)
                 raise
@@ -122,3 +129,21 @@ class JobService:
     def _release_owned_lock(self, lock_key: str, job_id: str) -> None:
         if self.redis.get(lock_key) == job_id:
             self.redis.delete(lock_key)
+
+    def _can_reuse_locked_job(self, job_id: str) -> bool:
+        state = self.celery.AsyncResult(job_id).state
+        if state not in ACTIVE_STATES:
+            return False
+        if state != "PENDING":
+            return True
+        queued_at = self.redis.get(_queued_timestamp_key(job_id))
+        if queued_at is None:
+            return False
+        try:
+            return time() - float(queued_at) < get_settings().queued_job_stale_seconds
+        except (TypeError, ValueError):
+            return False
+
+    def _discard_stale_job(self, lock_key: str, job_id: str) -> None:
+        """Release a job that never reached a worker, including pre-upgrade jobs."""
+        self.redis.delete(lock_key, f"job:known:{job_id}", _queued_timestamp_key(job_id))

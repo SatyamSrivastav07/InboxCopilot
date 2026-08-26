@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 60
     genai_max_retries: int = 3
     sync_lock_ttl_seconds: int = 30 * 60
+    queued_job_stale_seconds: int = 120
 
     @field_validator("frontend_origins", mode="before")
     @classmethod
@@ -74,8 +75,12 @@ class Settings(BaseSettings):
             raise ValueError("APP_ENV must be development, test, or production.")
         if self.max_request_bytes < 1:
             raise ValueError("MAX_REQUEST_BYTES must be positive.")
-        if self.cache_ttl_seconds < 1 or self.genai_max_retries < 1:
-            raise ValueError("CACHE_TTL_SECONDS and GENAI_MAX_RETRIES must be positive.")
+        if (
+            self.cache_ttl_seconds < 1
+            or self.genai_max_retries < 1
+            or self.queued_job_stale_seconds < 1
+        ):
+            raise ValueError("Cache, retry, and queued-job timeout values must be positive.")
         return self
 
     def require_mistral_api_key(self) -> str:
