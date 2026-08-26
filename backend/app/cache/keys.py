@@ -1,4 +1,5 @@
-DASHBOARD_KEY = "cache:dashboard:v1"
+DASHBOARD_KEY = "cache:dashboard:v2"
+LEGACY_DASHBOARD_KEYS = ("cache:dashboard:v1",)
 SYNC_LOCK_KEY = "lock:gmail-sync:local-account"
 
 

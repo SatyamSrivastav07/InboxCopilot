@@ -5,7 +5,7 @@ from typing import Any
 
 from redis import Redis
 
-from app.cache.keys import DASHBOARD_KEY
+from app.cache.keys import DASHBOARD_KEY, LEGACY_DASHBOARD_KEYS
 from app.config import get_settings
 
 
@@ -26,4 +26,5 @@ class CacheService:
             self.client.delete(*keys)
 
     def invalidate_inbox_summaries(self) -> None:
-        self.delete(DASHBOARD_KEY)
+        # Remove the prior schema key too, so upgrades cannot show stale dashboard data.
+        self.delete(DASHBOARD_KEY, *LEGACY_DASHBOARD_KEYS)

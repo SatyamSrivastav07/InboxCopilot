@@ -69,3 +69,17 @@ class TaskRepository:
         return self.db.scalar(
             select(func.count(TaskRecord.id)).where(TaskRecord.completed.is_(False))
         ) or 0
+
+    def upcoming_deadlines(self, from_date: date, limit: int = 5) -> list[TaskRecord]:
+        query = (
+            select(TaskRecord)
+            .options(selectinload(TaskRecord.email))
+            .where(
+                TaskRecord.completed.is_(False),
+                TaskRecord.normalized_deadline.is_not(None),
+                TaskRecord.normalized_deadline >= from_date,
+            )
+            .order_by(TaskRecord.normalized_deadline.asc(), TaskRecord.id.asc())
+            .limit(limit)
+        )
+        return list(self.db.scalars(query).unique())

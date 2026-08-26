@@ -10,6 +10,9 @@ from app.database.repositories.email_repository import EmailRepository
 from app.database.repositories.meeting_repository import MeetingRepository
 from app.database.repositories.task_repository import TaskRepository
 from app.schemas.persistence import (
+    DashboardDeadline,
+    DashboardEmail,
+    DashboardOverview,
     DashboardStats,
     PersistedEmail,
     PersistedMeeting,
@@ -90,3 +93,34 @@ class InboxQueryService:
         except SQLAlchemyError as exc:
             raise self._database_error(exc) from exc
 
+    def dashboard_overview(self) -> DashboardOverview:
+        stats = self.dashboard()
+        try:
+            return DashboardOverview(
+                stats=stats,
+                recent_important=[
+                    DashboardEmail(
+                        id=email.id,
+                        sender=email.sender,
+                        subject=email.subject,
+                        summary=email.summary,
+                        priority=email.priority,
+                        received_at=email.received_at,
+                    )
+                    for email in self.emails.recent_important()
+                ],
+                upcoming_deadlines=[
+                    DashboardDeadline(
+                        id=task.id,
+                        email_id=task.email_id,
+                        title=task.title,
+                        normalized_deadline=task.normalized_deadline,
+                        priority=task.priority,
+                        source_subject=task.email.subject,
+                    )
+                    for task in self.tasks.upcoming_deadlines(date.today())
+                    if task.normalized_deadline is not None
+                ],
+            )
+        except SQLAlchemyError as exc:
+            raise self._database_error(exc) from exc

@@ -89,3 +89,27 @@ class DashboardStats(BaseModel):
     pending_tasks: int
     high_urgent: int
     upcoming_meetings: int
+
+
+class DashboardEmail(BaseModel):
+    id: int
+    sender: str
+    subject: str
+    summary: str
+    priority: Priority
+    received_at: datetime | None
+
+
+class DashboardDeadline(BaseModel):
+    id: int
+    email_id: int
+    title: str
+    normalized_deadline: date
+    priority: Priority
+    source_subject: str
+
+
+class DashboardOverview(BaseModel):
+    stats: DashboardStats
+    recent_important: list[DashboardEmail]
+    upcoming_deadlines: list[DashboardDeadline]

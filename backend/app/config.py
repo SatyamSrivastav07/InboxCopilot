@@ -1,28 +1,39 @@
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from dotenv import load_dotenv
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ConfigurationError(RuntimeError):
     """Raised when a required runtime setting is missing."""
 
 
-@dataclass(frozen=True)
-class Settings:
-    mistral_api_key: str | None
-    mistral_model: str
-    frontend_origins: tuple[str, ...]
-    frontend_url: str
-    google_client_id: str | None
-    google_client_secret: str | None
-    google_redirect_uri: str
-    gmail_token_file: Path
-    database_url: str | None
+class Settings(BaseSettings):
+    """Centralized, environment-backed application configuration."""
+
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[1] / ".env",
+        env_file_encoding="utf-8",
+        enable_decoding=False,
+        extra="ignore",
+        frozen=True,
+    )
+
+    app_env: str = "development"
+    log_level: str = "INFO"
+    max_request_bytes: int = 1_000_000
+    mistral_api_key: str | None = None
+    mistral_model: str = "mistral-small-latest"
+    frontend_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
+    frontend_url: str = "http://localhost:5173"
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str = "http://localhost:8000/api/gmail/callback"
+    gmail_token_file: Path = Path("token.json")
+    database_url: str | None = None
     chroma_persist_directory: Path = Path("data/chromadb")
     chroma_collection_name: str = "inbox_emails"
     rag_top_k: int = 4
@@ -37,6 +48,35 @@ class Settings:
     cache_ttl_seconds: int = 60
     genai_max_retries: int = 3
     sync_lock_ttl_seconds: int = 30 * 60
+
+    @field_validator("frontend_origins", mode="before")
+    @classmethod
+    def split_origins(cls, value: str | tuple[str, ...] | list[str]) -> tuple[str, ...]:
+        if isinstance(value, str):
+            return tuple(item.strip() for item in value.split(",") if item.strip())
+        return tuple(value)
+
+    @field_validator("gmail_token_file", "chroma_persist_directory", mode="after")
+    @classmethod
+    def resolve_backend_paths(cls, value: Path) -> Path:
+        if value.is_absolute():
+            return value
+        return Path(__file__).resolve().parents[1] / value
+
+    @field_validator("frontend_url", mode="after")
+    @classmethod
+    def normalize_frontend_url(cls, value: str) -> str:
+        return value.rstrip("/")
+
+    @model_validator(mode="after")
+    def validate_runtime_shape(self) -> "Settings":
+        if self.app_env not in {"development", "test", "production"}:
+            raise ValueError("APP_ENV must be development, test, or production.")
+        if self.max_request_bytes < 1:
+            raise ValueError("MAX_REQUEST_BYTES must be positive.")
+        if self.cache_ttl_seconds < 1 or self.genai_max_retries < 1:
+            raise ValueError("CACHE_TTL_SECONDS and GENAI_MAX_RETRIES must be positive.")
+        return self
 
     def require_mistral_api_key(self) -> str:
         if not self.mistral_api_key:
@@ -60,52 +100,18 @@ class Settings:
             )
         return self.database_url
 
+    def validate_production_requirements(self) -> None:
+        if self.app_env != "production":
+            return
+        self.require_database_url()
+        self.require_mistral_api_key()
+        self.require_google_oauth()
+        if "*" in self.frontend_origins:
+            raise ConfigurationError("FRONTEND_ORIGINS cannot use wildcard origins in production.")
+        if not self.frontend_url.startswith("https://"):
+            raise ConfigurationError("FRONTEND_URL must use HTTPS in production.")
+
 
 @lru_cache
 def get_settings() -> Settings:
-    backend_dir = Path(__file__).resolve().parents[1]
-    load_dotenv(backend_dir / ".env")
-    origins = os.getenv(
-        "FRONTEND_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
-    )
-    token_file_value = os.getenv("GMAIL_TOKEN_FILE", "token.json")
-    token_file = Path(token_file_value)
-    if not token_file.is_absolute():
-        token_file = backend_dir / token_file
-    chroma_directory = Path(os.getenv("CHROMA_PERSIST_DIRECTORY", "./data/chromadb"))
-    if not chroma_directory.is_absolute():
-        chroma_directory = backend_dir / chroma_directory
-
-    return Settings(
-        mistral_api_key=os.getenv("MISTRAL_API_KEY"),
-        mistral_model=os.getenv("MISTRAL_MODEL", "mistral-small-latest"),
-        frontend_origins=tuple(origin.strip() for origin in origins.split(",") if origin.strip()),
-        frontend_url=os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/"),
-        google_client_id=os.getenv("GOOGLE_CLIENT_ID"),
-        google_client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-        google_redirect_uri=os.getenv(
-            "GOOGLE_REDIRECT_URI", "http://localhost:8000/api/gmail/callback"
-        ),
-        gmail_token_file=token_file,
-        database_url=os.getenv("DATABASE_URL"),
-        chroma_persist_directory=chroma_directory,
-        chroma_collection_name=os.getenv("CHROMA_COLLECTION_NAME", "inbox_emails"),
-        rag_top_k=int(os.getenv("RAG_TOP_K", "4")),
-        rag_score_threshold=float(os.getenv("RAG_SCORE_THRESHOLD", "0.2")),
-        email_chunk_size=int(os.getenv("EMAIL_CHUNK_SIZE", "1000")),
-        email_chunk_overlap=int(os.getenv("EMAIL_CHUNK_OVERLAP", "100")),
-        reply_thread_max_chars=int(os.getenv("REPLY_THREAD_MAX_CHARS", "12000")),
-        reply_thread_recent_messages=int(
-            os.getenv("REPLY_THREAD_RECENT_MESSAGES", "8")
-        ),
-        redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-        celery_broker_url=os.getenv(
-            "CELERY_BROKER_URL", "redis://localhost:6379/0"
-        ),
-        celery_result_backend=os.getenv(
-            "CELERY_RESULT_BACKEND", "redis://localhost:6379/1"
-        ),
-        cache_ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "60")),
-        genai_max_retries=int(os.getenv("GENAI_MAX_RETRIES", "3")),
-        sync_lock_ttl_seconds=int(os.getenv("SYNC_LOCK_TTL_SECONDS", "1800")),
-    )
+    return Settings()

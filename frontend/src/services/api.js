@@ -1,7 +1,11 @@
 import axios from 'axios'
 
+// Undefined means a local Vite server; an explicitly empty value means same-origin
+// requests through the production Nginx reverse proxy.
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  baseURL: apiBaseUrl,
   timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 })

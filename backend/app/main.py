@@ -45,14 +45,15 @@ logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
-    configure_logging()
-    app = FastAPI(title="AI Inbox Copilot API", version="0.7.0")
     settings = get_settings()
+    settings.validate_production_requirements()
+    configure_logging(settings.log_level)
+    app = FastAPI(title="AI Inbox Copilot API", version="0.8.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.frontend_origins),
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
         allow_headers=["*"],
         expose_headers=["X-Request-ID"],
     )
@@ -61,6 +62,19 @@ def create_app() -> FastAPI:
     async def request_id_middleware(request: Request, call_next):
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         request.state.request_id = request_id
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                is_too_large = int(content_length) > settings.max_request_bytes
+            except ValueError:
+                is_too_large = False
+            if is_too_large:
+                return error_response(
+                    request,
+                    413,
+                    "REQUEST_TOO_LARGE",
+                    "Request body exceeds the configured size limit.",
+                )
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         logger.info(

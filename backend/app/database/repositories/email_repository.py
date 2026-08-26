@@ -111,6 +111,15 @@ class EmailRepository:
     def list_all_for_indexing(self) -> list[EmailRecord]:
         return list(self.db.scalars(select(EmailRecord).order_by(EmailRecord.id)))
 
+    def recent_important(self, limit: int = 5) -> list[EmailRecord]:
+        query = self._with_analysis(
+            select(EmailRecord)
+            .where(EmailRecord.priority.in_(["urgent", "high"]))
+            .order_by(EmailRecord.received_at.desc().nullslast(), EmailRecord.id.desc())
+            .limit(limit)
+        )
+        return list(self.db.scalars(query).unique())
+
 
     def count_needs_reply(self) -> int:
         return self.db.scalar(
