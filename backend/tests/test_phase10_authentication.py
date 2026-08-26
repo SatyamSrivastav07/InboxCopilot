@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.auth.dependencies import get_current_user
 from app.auth.google_oauth import GoogleOAuthService
 from app.config import Settings
+from app.database.dependencies import get_db
 from app.database.models.user import UserRecord
 from app.database.repositories.user_repository import UserRepository
 from app.main import app
@@ -24,8 +25,12 @@ def oauth_settings(tmp_path) -> Settings:
     )
 
 
-def test_session_status_is_public_but_inbox_routes_require_a_signed_in_user():
+def test_session_status_is_public_but_inbox_routes_require_a_signed_in_user(override_db):
     app.dependency_overrides.clear()
+    # The public session endpoint still receives a database dependency. Use the
+    # in-memory test database so this assertion does not depend on a developer
+    # .env file (or on CI having a PostgreSQL URL configured).
+    app.dependency_overrides[get_db] = override_db
     client = TestClient(app)
 
     assert client.get("/api/auth/session").json() == {
