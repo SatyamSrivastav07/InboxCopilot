@@ -116,7 +116,8 @@ uvicorn app.main:app --reload --port 8000
 # terminal 2 — worker
 cd backend
 .\.venv\Scripts\Activate.ps1
-celery -A app.workers.celery_app:celery_app worker --loglevel=info --concurrency=2
+# Windows uses solo because Celery's prefork process pool is not reliable there.
+celery -A app.workers.celery_app:celery_app worker --loglevel=info --pool=solo
 ```
 
 ```powershell
@@ -127,6 +128,7 @@ npm run dev
 ```
 
 For a direct local run, Redis URLs should use `redis://localhost:6379` and the database host stays `localhost`. Compose hostnames work only inside Docker.
+On Windows, keep the worker command's `--pool=solo`; the Docker worker runs on Linux and uses two concurrent processes.
 
 ## Configuration and security
 
