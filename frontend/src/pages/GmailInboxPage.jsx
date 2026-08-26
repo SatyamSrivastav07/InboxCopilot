@@ -161,7 +161,7 @@ export default function GmailInboxPage() {
   useEffect(() => {
     if (automaticSyncStarted.current || callbackStatus !== 'connected' || !session?.authenticated || !gmailStatus?.connected) return
     automaticSyncStarted.current = true
-    void sync({ requestedLimit: 5, requestedUnreadOnly: false })
+    void sync({ requestedLimit: 10, requestedUnreadOnly: false })
   }, [callbackStatus, gmailStatus?.connected, session?.authenticated])
 
   const clearCallbackNotice = () => {
@@ -243,7 +243,7 @@ export default function GmailInboxPage() {
 
       {callbackStatus && (
         <div className={`mt-5 flex items-start justify-between gap-4 rounded-xl border p-4 text-sm ${callbackStatus === 'connected' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`} role="status">
-          <span>{callbackStatus === 'connected' ? 'Gmail connected successfully. Your first 5 emails are syncing automatically.' : callbackReason || 'Gmail connection failed.'}</span>
+          <span>{callbackStatus === 'connected' ? 'Gmail connected successfully. Your first 10 emails are syncing automatically.' : callbackReason || 'Gmail connection failed.'}</span>
           <button className="font-bold" type="button" onClick={clearCallbackNotice} aria-label="Dismiss">×</button>
         </div>
       )}
