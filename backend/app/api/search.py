@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.auth.dependencies import CurrentUser
 from app.cache.keys import inbox_reindex_lock_key
@@ -9,12 +9,14 @@ from app.schemas.search import (
     SemanticSearchRequest,
     SemanticSearchResponse,
 )
-from app.schemas.jobs import JobQueued
+from app.schemas.jobs import JobQueued, JobState
 from app.services.job_dependencies import get_job_service
 from app.services.jobs import JobService
 from app.vectorstore.dependencies import get_vector_retriever
 from app.vectorstore.retriever import VectorRetriever
 from app.core.metrics import log_timing
+from app.config import get_settings
+from app.services.inline_jobs import run_inline_reindex
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/search", tags=["semantic-search"])
@@ -34,12 +36,16 @@ def semantic_search(
     return SemanticSearchResponse(results=[item.to_schema() for item in results])
 
 
-@router.post("/reindex", response_model=JobQueued, status_code=202)
+@router.post("/reindex", response_model=JobQueued | JobState, status_code=202)
 def reindex(
     request: Request,
+    response: Response,
     user: CurrentUser,
     jobs: Annotated[JobService, Depends(get_job_service)],
-) -> JobQueued:
+) -> JobQueued | JobState:
+    if get_settings().sync_execution_mode == "request":
+        response.status_code = status.HTTP_200_OK
+        return run_inline_reindex(user_id=user.id)
     return jobs.enqueue(
         "app.workers.indexing_tasks.reindex_inbox",
         kwargs={"user_id": user.id},

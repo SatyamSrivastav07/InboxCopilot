@@ -18,6 +18,7 @@ from app.services.email_persistence import EmailPersistenceService
 from app.services.gmail_sync import GmailSyncService
 from app.services.job_dependencies import get_job_service
 from app.schemas.jobs import JobQueued
+from app.schemas.jobs import JobState
 from app.vectorstore.dependencies import get_vector_indexer
 from app.vectorstore.indexer import IndexResult
 
@@ -167,6 +168,34 @@ def test_sync_queues_background_job_instead_of_blocking():
         "limit": 5,
         "unread_only": True,
     }
+
+
+def test_sync_completes_in_request_in_free_mode(monkeypatch):
+    from app.api import gmail as gmail_api
+    from app.config import get_settings
+
+    monkeypatch.setenv("SYNC_EXECUTION_MODE", "request")
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        gmail_api,
+        "run_inline_gmail_sync",
+        lambda **_kwargs: JobState(
+            job_id="inline-test-job",
+            status="completed",
+            progress={"total": 1, "processed": 1, "failed": 0},
+            result={"total": 1, "processed": 1, "cached": 0, "failed": 0},
+        ),
+    )
+    try:
+        response = TestClient(app).post(
+            "/api/gmail/sync", json={"limit": 5, "unread_only": False}
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["job_id"] == "inline-test-job"
 
 
 def test_sync_rejects_unbounded_limit(override_db):

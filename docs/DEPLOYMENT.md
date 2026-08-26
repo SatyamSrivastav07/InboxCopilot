@@ -1,11 +1,11 @@
 # Public deployment guide
 
-This project is designed for a Vercel frontend and a Render API, PostgreSQL, and Redis deployment. The Vercel project includes a same-origin `/api/*` proxy so the signed session cookie remains first-party in the browser. Do not expose the Render API URL to browser code unless you deliberately choose a cross-origin deployment.
+This project is designed for a Vercel frontend and a Render API. The Vercel project includes a same-origin `/api/*` proxy so the signed session cookie remains first-party in the browser. Do not expose the Render API URL to browser code unless you deliberately choose a cross-origin deployment. For the no-payment demo path, follow [FREE_DEPLOYMENT.md](FREE_DEPLOYMENT.md); the root `render.yaml` is configured for it.
 
 ## 1. Deploy the API on Render
 
-1. In Render, create a **Blueprint** from this repository. It reads `render.yaml` and creates the API, managed PostgreSQL, and Key Value (Redis).
-2. Use a plan that supports the configured persistent disk. Chroma is an embedded, rebuildable index and needs `/app/data` to survive deploys.
+1. In Render, create a **Blueprint** from this repository. It reads `render.yaml` and creates the API, free PostgreSQL, and free Key Value resources as described in [FREE_DEPLOYMENT.md](FREE_DEPLOYMENT.md).
+2. Free mode stores the rebuildable Chroma index under `/tmp`; durable product data is stored in Render Postgres.
 3. Set these secret environment variables in the Render service:
 
    ```text
@@ -22,7 +22,7 @@ This project is designed for a Vercel frontend and a Render API, PostgreSQL, and
    Generate `TOKEN_ENCRYPTION_KEY` once with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`, and generate `SESSION_SECRET` once with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Keep both values stable; rotating either invalidates stored credentials or signs users out.
 4. Deploy. Render runs Alembic before starting the API. Confirm `https://YOUR_RENDER_DOMAIN/health/ready` returns `status: ready`.
 
-The Render start script supervises Celery: if a worker exits it is restarted, while a normal Render deploy stops both the worker and API cleanly.
+Free mode runs a small user-requested Gmail sync inside the API request, so no Celery worker is required.
 
 ## 2. Deploy the frontend on Vercel
 
@@ -70,7 +70,7 @@ Run this after every production deployment:
 1. Open the Vercel URL in an incognito/private window.
 2. Select **Sign in with Google**, then accept the consent flow.
 3. Confirm the browser returns to `/gmail`, shows the connected account, and `https://YOUR_RENDER_DOMAIN/health/ready` remains ready.
-4. Sync one or two messages. Confirm the job completes and the same email does not appear under a different Google account.
+4. Sync a small batch (five messages recommended). Confirm it completes and the same email does not appear under a different Google account.
 5. Generate a reply draft, edit it, explicitly approve it, and send only to a test recipient.
 6. Check Render logs for request IDs and worker restart errors. Never paste OAuth tokens, Gmail content, database URLs, or API keys into logs or issues.
 
@@ -78,7 +78,7 @@ Users can remove saved Gmail credentials from **Gmail Inbox → Your data contro
 
 ## Operational limits
 
-- The Render blueprint intentionally co-locates API and worker because a single persistent Chroma disk cannot be shared by independent Render services. Move semantic indexing to managed vector storage before horizontally scaling workers.
-- PostgreSQL is the durable product data source. Chroma can be rebuilt by running a user-scoped reindex.
+- The free deployment intentionally has no always-on worker. Long syncs can time out; use small, user-triggered batches.
+- PostgreSQL is the durable product data source. Chroma is derived and may need rebuilding after a free Render restart.
 - Google verification is not automated by this repository. Until it is approved, only configured test users can complete the Gmail OAuth flow.
 - API responses set no-cache and browser security headers. HTTPS responses also set HSTS in production.

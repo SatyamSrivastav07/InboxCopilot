@@ -159,10 +159,10 @@ The seed is idempotent. For semantic search, run the normal full-index action af
 
 ## Render backend + Vercel frontend
 
-This repository includes `render.yaml` for a small Render deployment. It creates a Render web service, managed Postgres, and Redis-compatible Key Value. API and Celery run together in the web container so they share the one persistent `/app/data` disk used by embedded Chroma. Render disks cannot be shared between separate services, which is why the worker is intentionally co-located for this deployment shape. The Render worker is supervised and restarts after an unexpected exit.
+This repository includes a free-demo `render.yaml`: it creates a Render Free API, Postgres, and Redis-compatible Key Value instance. Gmail sync runs inside the user's request, so it needs no always-on Celery worker. See [docs/FREE_DEPLOYMENT.md](docs/FREE_DEPLOYMENT.md) for setup and free-tier limits.
 
 1. Deploy the Vite frontend on Vercel first: import this GitHub repo, set **Root Directory** to `frontend`, and set only the server-side variable `BACKEND_ORIGIN` to the Render API URL. Do not set `VITE_API_BASE_URL`; Vercel's included `/api/*` proxy keeps session cookies first-party.
-2. In Render, select **New > Blueprint**, connect the same repository, and choose `render.yaml`. Use a paid plan: the persistent disk and background processing need it.
+2. In Render, select **New > Blueprint**, connect the same repository, and choose `render.yaml`. It provisions the included free Postgres and Key Value resources.
 3. In Render's secret prompt, set `MISTRAL_API_KEY`, Google OAuth values, one persistent `TOKEN_ENCRYPTION_KEY`, one persistent `SESSION_SECRET`, and:
 
    ```text

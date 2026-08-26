@@ -130,8 +130,24 @@ export default function GmailInboxPage() {
     setError('')
     setSyncJob({ status: 'submitting', progress: { total: limit, processed: 0, failed: 0 } })
     try {
-      const queued = await syncGmailInbox({ limit, unread_only: unreadOnly })
-      setSyncJob({ ...queued, progress: { total: limit, processed: 0, failed: 0 } })
+      const result = await syncGmailInbox({ limit, unread_only: unreadOnly })
+      if (['completed', 'partial_success', 'failed'].includes(result.status)) {
+        setSyncJob(result)
+        if (result.status === 'failed') {
+          setError(result.error || 'Inbox sync failed. You can retry safely.')
+        } else {
+          const emails = await getPersistedEmails({ limit, offset: 0 })
+          setSyncResult({
+            count: result.result?.total || emails.length,
+            analyzed_count: (result.result?.processed || 0) + (result.result?.cached || 0),
+            failed_count: result.result?.failed || 0,
+            emails: emails.map(persistedToSyncItem),
+          })
+        }
+        setIsSyncing(false)
+        return
+      }
+      setSyncJob({ ...result, progress: { total: limit, processed: 0, failed: 0 } })
     } catch (requestError) {
       setError(requestError.message)
       setIsSyncing(false)
@@ -229,7 +245,7 @@ export default function GmailInboxPage() {
 
       {isSyncing && (
         <div className="card mt-6 flex min-h-48 items-center justify-center text-center" aria-live="polite">
-          <div><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" /><p className="mt-4 font-semibold">Syncing inbox in the background…</p><p className="mt-2 text-lg font-bold text-indigo-700">{syncJob?.progress?.processed || 0} / {syncJob?.progress?.total || limit} emails processed</p><p className="mt-1 text-sm text-slate-500">You can navigate elsewhere; the worker will continue safely.</p>{syncJob?.reused && <p className="mt-2 text-xs text-amber-700">An existing sync job is already running, so it was reused.</p>}</div>
+          <div><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" /><p className="mt-4 font-semibold">Syncing and analyzing your inbox…</p><p className="mt-2 text-lg font-bold text-indigo-700">{syncJob?.progress?.processed || 0} / {syncJob?.progress?.total || limit} emails processed</p><p className="mt-1 text-sm text-slate-500">Keep this tab open until the sync completes.</p>{syncJob?.reused && <p className="mt-2 text-xs text-amber-700">An existing sync job is already running, so it was reused.</p>}</div>
         </div>
       )}
 

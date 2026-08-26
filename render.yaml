@@ -1,24 +1,35 @@
 services:
+  # Free-demo deployment: no persistent disk or always-on worker.
   - type: web
     name: ai-inbox-copilot-api
     runtime: docker
-    region: singapore
-    plan: starter
+    region: oregon
+    plan: free
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    dockerCommand: sh scripts/render-start.sh
+    dockerCommand: sh scripts/render-free-start.sh
     healthCheckPath: /health/ready
-    disk:
-      name: inbox-copilot-data
-      mountPath: /app/data
-      sizeGB: 1
     envVars:
       - key: APP_ENV
         value: production
       - key: LOG_LEVEL
         value: INFO
+      - key: SYNC_EXECUTION_MODE
+        value: request
+      # Render free instances have ephemeral storage. PostgreSQL remains durable;
+      # the derived Chroma search index is rebuilt on a later user sync if needed.
+      - key: CHROMA_PERSIST_DIRECTORY
+        value: /tmp/chromadb
+      - key: MISTRAL_MODEL
+        value: mistral-small-latest
       - key: MAX_REQUEST_BYTES
         value: "1000000"
+      - key: CACHE_TTL_SECONDS
+        value: "60"
+      - key: GENAI_MAX_RETRIES
+        value: "3"
+      - key: MISTRAL_API_KEY
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: ai-inbox-copilot-db
@@ -28,33 +39,6 @@ services:
           type: keyvalue
           name: ai-inbox-copilot-queue
           property: connectionString
-      - key: CELERY_BROKER_URL
-        fromService:
-          type: keyvalue
-          name: ai-inbox-copilot-queue
-          property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          type: keyvalue
-          name: ai-inbox-copilot-queue
-          property: connectionString
-      - key: CHROMA_PERSIST_DIRECTORY
-        value: /app/data/chromadb
-      - key: GMAIL_TOKEN_FILE
-        value: /app/data/gmail/token.json
-      - key: MISTRAL_MODEL
-        value: mistral-small-latest
-      - key: CACHE_TTL_SECONDS
-        value: "60"
-      - key: GENAI_MAX_RETRIES
-        value: "3"
-      - key: SYNC_LOCK_TTL_SECONDS
-        value: "1800"
-      - key: QUEUED_JOB_STALE_SECONDS
-        value: "120"
-      # Values below are entered only in Render's secret prompt/dashboard.
-      - key: MISTRAL_API_KEY
-        sync: false
       - key: TOKEN_ENCRYPTION_KEY
         sync: false
       - key: SESSION_SECRET
@@ -72,15 +56,13 @@ services:
 
   - type: keyvalue
     name: ai-inbox-copilot-queue
-    region: singapore
-    plan: starter
+    region: oregon
+    plan: free
     ipAllowList: []
-    maxmemoryPolicy: noeviction
-    persistenceMode: journal-snapshot
 
 databases:
   - name: ai-inbox-copilot-db
-    region: singapore
-    plan: basic-256mb
+    region: oregon
+    plan: free
     databaseName: inbox_copilot
     user: inbox_copilot

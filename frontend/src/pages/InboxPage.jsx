@@ -70,6 +70,11 @@ export default function InboxPage() {
     try {
       const job = await reprocessEmail(emailId)
       setReprocessJob({ ...job, email_id: emailId })
+      if (job.status === 'completed') {
+        setEmails(await getPersistedEmails({}))
+      } else if (job.status === 'failed') {
+        setError(job.error || 'Email reprocessing failed. You can retry safely.')
+      }
     } catch (requestError) {
       setError(requestError.message)
     }

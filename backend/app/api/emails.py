@@ -1,16 +1,18 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from app.auth.dependencies import CurrentUser
 from app.cache.keys import email_reprocess_lock_key
 from app.schemas.email import EmailCategory, Priority
 from app.schemas.persistence import PersistedEmail
-from app.schemas.jobs import JobQueued
+from app.schemas.jobs import JobQueued, JobState
 from app.services.dependencies import get_inbox_query_service
 from app.services.inbox_queries import InboxQueryService
 from app.services.job_dependencies import get_job_service
 from app.services.jobs import JobService
+from app.services.inline_jobs import run_inline_reprocess
+from app.config import get_settings
 from app.security.rate_limit_dependencies import limit_inbox_sync
 
 router = APIRouter(prefix="/api/emails", tags=["persisted-emails"])
@@ -44,16 +46,20 @@ def get_email(
     return service.get_email(email_id)
 
 
-@router.post("/{email_id}/reprocess", response_model=JobQueued, status_code=202)
+@router.post("/{email_id}/reprocess", response_model=JobQueued | JobState, status_code=202)
 def reprocess_email(
     email_id: int,
     request: Request,
+    response: Response,
     user: CurrentUser,
     _rate_limit: Annotated[None, Depends(limit_inbox_sync)],
     service: Annotated[InboxQueryService, Depends(get_inbox_query_service)],
     jobs: Annotated[JobService, Depends(get_job_service)],
-) -> JobQueued:
+) -> JobQueued | JobState:
     service.get_email(email_id)
+    if get_settings().sync_execution_mode == "request":
+        response.status_code = status.HTTP_200_OK
+        return run_inline_reprocess(user_id=user.id, email_id=email_id)
     return jobs.enqueue(
         "app.workers.gmail_tasks.reprocess_email",
         kwargs={"user_id": user.id, "email_id": email_id},

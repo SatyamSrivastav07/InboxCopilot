@@ -5,7 +5,7 @@ import json
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -30,9 +30,10 @@ from app.gmail.schemas import (
     GmailSyncRequest,
 )
 from app.cache.keys import gmail_sync_lock_key
-from app.schemas.jobs import JobQueued
+from app.schemas.jobs import JobQueued, JobState
 from app.services.job_dependencies import get_job_service
 from app.services.jobs import JobService
+from app.services.inline_jobs import run_inline_gmail_sync
 from app.security.rate_limit_dependencies import limit_inbox_sync
 
 logger = logging.getLogger(__name__)
@@ -136,14 +137,18 @@ def gmail_email(
     return parse_gmail_message(fetcher.fetch_message(message_id))
 
 
-@router.post("/sync", response_model=JobQueued, status_code=202)
+@router.post("/sync", response_model=JobQueued | JobState, status_code=202)
 def sync_gmail(
     request: GmailSyncRequest,
     http_request: Request,
+    response: Response,
     user: CurrentUser,
     _rate_limit: Annotated[None, Depends(limit_inbox_sync)],
     jobs: Annotated[JobService, Depends(get_job_service)],
-) -> JobQueued:
+) -> JobQueued | JobState:
+    if get_settings().sync_execution_mode == "request":
+        response.status_code = status.HTTP_200_OK
+        return run_inline_gmail_sync(user_id=user.id, request=request)
     return jobs.enqueue(
         "app.workers.gmail_tasks.sync_gmail",
         kwargs={"user_id": user.id, "limit": request.limit, "unread_only": request.unread_only},
