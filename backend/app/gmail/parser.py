@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import re
 from datetime import datetime, timezone
+from html import unescape
 from email.utils import getaddresses, parsedate_to_datetime
 from typing import Any
 
@@ -22,9 +23,22 @@ def _decode_data(data: str | None) -> str:
         raise GmailParseError("Email body contains invalid encoded data.") from exc
 
 
-def _clean_text(value: str) -> str:
+def sanitize_email_text(value: str) -> str:
+    """Decode broken/double-encoded HTML entities and invisible spacer glyphs."""
+    for _ in range(3):
+        decoded = unescape(value)
+        if decoded == value:
+            break
+        value = decoded
+    value = (
+        value.replace("\u00a0", " ")
+        .replace("\u200b", "")
+        .replace("\u200c", "")
+        .replace("\u200d", "")
+        .replace("\ufeff", "")
+    )
     value = value.replace("\r\n", "\n").replace("\r", "\n")
-    lines = [line.strip() for line in value.split("\n")]
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in value.split("\n")]
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
@@ -32,7 +46,7 @@ def _html_to_text(value: str) -> str:
     soup = BeautifulSoup(value, "html.parser")
     for element in soup(["script", "style", "noscript"]):
         element.decompose()
-    return _clean_text(soup.get_text(separator="\n"))
+    return sanitize_email_text(soup.get_text(separator="\n"))
 
 
 def _collect_bodies(part: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -47,7 +61,7 @@ def _collect_bodies(part: dict[str, Any]) -> tuple[list[str], list[str]]:
         decoded = _decode_data(body.get("data"))
         if decoded:
             if mime_type == "text/plain":
-                plain.append(_clean_text(decoded))
+                plain.append(sanitize_email_text(decoded))
             elif mime_type == "text/html":
                 html.append(_html_to_text(decoded))
 

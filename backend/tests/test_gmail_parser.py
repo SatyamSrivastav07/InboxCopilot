@@ -2,7 +2,7 @@ import base64
 
 import pytest
 
-from app.gmail.parser import parse_gmail_message
+from app.gmail.parser import parse_gmail_message, sanitize_email_text
 
 
 def encoded(value: str) -> str:
@@ -109,3 +109,21 @@ def test_ignores_attachment_and_handles_nested_multipart(attachment_payload):
 def test_handles_empty_body(empty_body_payload):
     assert parse_gmail_message(empty_body_payload).body == ""
 
+
+def test_decodes_double_encoded_spacing_entities():
+    payload = message(
+        {
+            "mimeType": "text/html",
+            "body": {
+                "data": encoded(
+                    "<p>Hello&amp;nbsp;&amp;zwnj;world</p>"
+                    "<p>&amp;amp;nbsp;&amp;amp;zwnj;Next line</p>"
+                )
+            },
+        }
+    )
+    assert parse_gmail_message(payload).body == "Hello world\nNext line"
+
+
+def test_sanitizer_removes_unicode_invisible_spacers_and_collapses_blank_lines():
+    assert sanitize_email_text("First\u00a0\u200c line\n\n\n\nSecond") == "First line\n\nSecond"
