@@ -18,7 +18,14 @@ from app.gmail.errors import GmailNotConnectedError, GmailOAuthError
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
-GOOGLE_IDENTITY_SCOPES = ["openid", "email", "profile"]
+# Google returns the canonical userinfo URLs in token responses. Request those
+# same names (rather than the OIDC aliases `email` and `profile`) so OAuthlib
+# does not treat an equivalent Google response as a changed-scope warning.
+GOOGLE_IDENTITY_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+]
 GMAIL_SCOPES = [*GOOGLE_IDENTITY_SCOPES, GMAIL_READONLY_SCOPE, GMAIL_SEND_SCOPE]
 OAUTH_STATE_TTL_SECONDS = 10 * 60
 logger = logging.getLogger(__name__)
