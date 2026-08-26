@@ -43,6 +43,34 @@
   background: color-mix(in srgb, white 78%, transparent);
 }
 
+.brand-mark {
+  position: relative;
+  height: 2.75rem;
+  width: 2.75rem;
+  overflow: hidden;
+  border: 1px solid rgb(99 102 241 / 0.18);
+  border-radius: 0.85rem;
+  background: white;
+  box-shadow: 0 8px 18px rgb(79 70 229 / 0.16);
+}
+
+.brand-mark__image {
+  position: absolute;
+  left: 50%;
+  width: 172%;
+  max-width: none;
+  transform: translateX(-50%);
+}
+
+.brand-mark__image--light {
+  top: -8%;
+}
+
+.brand-mark__image--dark {
+  top: -19%;
+  display: none;
+}
+
 .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -87,6 +115,20 @@ html.dark * {
 html.dark .app-header,
 html.dark .app-footer {
   background: rgb(12 19 35 / 0.82);
+}
+
+html.dark .brand-mark {
+  border-color: rgb(99 102 241 / 0.52);
+  background: #020617;
+  box-shadow: 0 8px 21px rgb(79 70 229 / 0.34);
+}
+
+html.dark .brand-mark__image--light {
+  display: none;
+}
+
+html.dark .brand-mark__image--dark {
+  display: block;
 }
 
 html.dark .app-nav,

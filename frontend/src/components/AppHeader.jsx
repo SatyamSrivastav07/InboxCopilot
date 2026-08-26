@@ -16,7 +16,10 @@ export default function AppHeader() {
     <header className="app-header sticky top-0 z-40 border-b backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-4 sm:px-8 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 font-bold text-white shadow-lg shadow-indigo-500/20">AI</div>
+          <div aria-hidden="true" className="brand-mark">
+            <img className="brand-mark__image brand-mark__image--light" src="/brand/inbox-copilot-light.jpg" />
+            <img className="brand-mark__image brand-mark__image--dark" src="/brand/inbox-copilot-dark.png" />
+          </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight">AI Inbox Copilot</h1>
             <p className="text-sm text-slate-500">Turn email into clear next steps.</p>
