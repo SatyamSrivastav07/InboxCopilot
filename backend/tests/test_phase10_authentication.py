@@ -9,10 +9,12 @@ from app.auth.dependencies import get_current_user
 from app.auth.google_oauth import GoogleOAuthService
 from app.config import Settings
 from app.database.dependencies import get_db
+from app.database.models.gmail_connection import GmailConnectionRecord
 from app.database.models.user import UserRecord
 from app.database.repositories.user_repository import UserRepository
 from app.main import app
 from app.services.jobs import JobNotFoundError, JobService
+from app.vectorstore.dependencies import get_vector_store
 
 
 def oauth_settings(tmp_path) -> Settings:
@@ -79,6 +81,60 @@ def test_google_identity_repository_reuses_the_same_subject(db_session):
     assert first.id == second.id
     assert second.display_name == "Updated Name"
     assert second.avatar_url == "https://example.com/avatar.png"
+
+
+class _VectorStore:
+    def __init__(self):
+        self.deleted_user_ids = []
+
+    def delete_user(self, user_id):
+        self.deleted_user_ids.append(user_id)
+
+
+def test_account_deletion_clears_vectors_and_user_data(db_session, override_db):
+    user = UserRecord(
+        google_subject="delete-subject", email="delete@example.com", status="active"
+    )
+    db_session.add(user)
+    db_session.commit()
+    vector_store = _VectorStore()
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_vector_store] = lambda: vector_store
+
+    response = TestClient(app).request(
+        "DELETE", "/api/auth/account", json={"confirmation": "DELETE"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": True}
+    assert vector_store.deleted_user_ids == [user.id]
+    assert db_session.get(UserRecord, user.id) is None
+
+
+def test_gmail_disconnect_removes_saved_credentials(db_session, override_db):
+    user = UserRecord(
+        google_subject="disconnect-subject", email="disconnect@example.com", status="active"
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(
+        GmailConnectionRecord(
+            user_id=user.id,
+            encrypted_credentials="encrypted",
+            granted_scopes=["https://www.googleapis.com/auth/gmail.readonly"],
+        )
+    )
+    db_session.commit()
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: user
+
+    response = TestClient(app).delete("/api/gmail/connection")
+
+    assert response.status_code == 204
+    assert db_session.get(GmailConnectionRecord, 1) is None
 
 
 class _Redis:

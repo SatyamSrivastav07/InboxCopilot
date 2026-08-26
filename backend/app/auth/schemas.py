@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -19,3 +21,11 @@ class SessionStatus(AuthModel):
 
 class GoogleAuthUrl(AuthModel):
     authorization_url: str
+
+
+class AccountDeletionRequest(AuthModel):
+    confirmation: Literal["DELETE"]
+
+
+class AccountDeletionStatus(AuthModel):
+    deleted: bool

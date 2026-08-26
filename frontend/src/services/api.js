@@ -73,6 +73,23 @@ export async function logout() {
   }
 }
 
+export async function disconnectGmail() {
+  try {
+    await api.delete('/api/gmail/connection')
+  } catch (error) {
+    throw apiError(error, 'Could not disconnect Gmail.')
+  }
+}
+
+export async function deleteAccount() {
+  try {
+    const { data } = await api.delete('/api/auth/account', { data: { confirmation: 'DELETE' } })
+    return data
+  } catch (error) {
+    throw apiError(error, 'Could not delete your account data.')
+  }
+}
+
 export async function getGmailAuthUrl() {
   return getGoogleAuthUrl()
 }

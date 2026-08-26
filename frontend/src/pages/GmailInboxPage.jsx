@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import GmailEmailCard from '../components/GmailEmailCard.jsx'
 import GmailEmailDetails from '../components/GmailEmailDetails.jsx'
-import { getGmailAuthUrl, getGmailStatus, getJobStatus, getPersistedEmails, syncGmailInbox } from '../services/api.js'
+import { deleteAccount, disconnectGmail, getGmailAuthUrl, getGmailStatus, getJobStatus, getPersistedEmails, syncGmailInbox } from '../services/api.js'
 
 function persistedToSyncItem(email) {
   const grouped = { people: [], organizations: [], dates: [], locations: [] }
@@ -47,6 +47,9 @@ export default function GmailInboxPage() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncJob, setSyncJob] = useState(null)
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [isRemovingData, setIsRemovingData] = useState(false)
   const [error, setError] = useState('')
 
   const callbackStatus = searchParams.get('gmail')
@@ -142,6 +145,33 @@ export default function GmailInboxPage() {
     setSearchParams({}, { replace: true })
   }
 
+  const disconnect = async () => {
+    setIsRemovingData(true)
+    setError('')
+    try {
+      await disconnectGmail()
+      setGmailStatus({ connected: false, can_read: false, can_send: false })
+      setSyncResult(null)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setIsRemovingData(false)
+    }
+  }
+
+  const removeAccount = async () => {
+    if (deleteConfirmation !== 'DELETE') return
+    setIsRemovingData(true)
+    setError('')
+    try {
+      await deleteAccount()
+      await refreshSession()
+    } catch (requestError) {
+      setError(requestError.message)
+      setIsRemovingData(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
       <section className="card">
@@ -221,6 +251,18 @@ export default function GmailInboxPage() {
           ) : (
             <div className="card text-center text-sm text-slate-500">No matching inbox messages were found.</div>
           )}
+        </section>
+      )}
+
+      {session?.authenticated && (
+        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-slate-900">Your data controls</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Disconnecting removes this app’s saved Gmail credentials. Deleting your account permanently removes your stored inbox data, generated drafts, and search index from AI Inbox Copilot.</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            {gmailStatus?.connected && <button className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50" type="button" onClick={disconnect} disabled={isRemovingData}>Disconnect Gmail</button>}
+            <button className="rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50" type="button" onClick={() => setShowDeleteAccount((visible) => !visible)} disabled={isRemovingData}>Delete account data</button>
+          </div>
+          {showDeleteAccount && <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-sm font-medium text-rose-900">This cannot be undone. Type <code className="rounded bg-white px-1.5 py-0.5">DELETE</code> to permanently remove your account data.</p><div className="mt-3 flex flex-col gap-3 sm:flex-row"><input className="field flex-1 bg-white" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} placeholder="Type DELETE" aria-label="Account deletion confirmation" /><button className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-rose-300" type="button" onClick={removeAccount} disabled={deleteConfirmation !== 'DELETE' || isRemovingData}>{isRemovingData ? 'Deleting…' : 'Permanently delete'}</button></div></div>}
         </section>
       )}
 

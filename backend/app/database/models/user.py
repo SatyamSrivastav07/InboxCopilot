@@ -29,7 +29,9 @@ class UserRecord(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    emails: Mapped[list[EmailRecord]] = relationship(back_populates="user")
+    emails: Mapped[list[EmailRecord]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
     gmail_connection: Mapped[GmailConnectionRecord | None] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
     )

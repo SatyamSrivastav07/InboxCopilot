@@ -16,3 +16,10 @@ class GmailConnectionRepository:
     def add(self, connection: GmailConnectionRecord) -> GmailConnectionRecord:
         self.db.add(connection)
         return connection
+
+    def delete_for_user(self, user_id: int) -> bool:
+        connection = self.get_for_user(user_id)
+        if connection is None:
+            return False
+        self.db.delete(connection)
+        return True

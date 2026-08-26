@@ -74,6 +74,8 @@ Run this after every production deployment:
 5. Generate a reply draft, edit it, explicitly approve it, and send only to a test recipient.
 6. Check Render logs for request IDs and worker restart errors. Never paste OAuth tokens, Gmail content, database URLs, or API keys into logs or issues.
 
+Users can remove saved Gmail credentials from **Gmail Inbox → Your data controls → Disconnect Gmail**. They can permanently remove their stored workspace data only after typing `DELETE`; the app clears the user-scoped Chroma vectors before deleting the database account.
+
 ## Operational limits
 
 - The Render blueprint intentionally co-locates API and worker because a single persistent Chroma disk cannot be shared by independent Render services. Move semantic indexing to managed vector storage before horizontally scaling workers.

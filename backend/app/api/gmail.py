@@ -13,6 +13,7 @@ from app.auth.dependencies import CurrentUser
 from app.auth.google_oauth import GoogleOAuthService
 from app.config import ConfigurationError, get_settings
 from app.database.dependencies import get_db
+from app.database.repositories.gmail_connection_repository import GmailConnectionRepository
 from app.database.repositories.user_repository import UserRepository
 from app.security.token_cipher import OAuthTokenCipher
 from app.services.gmail_connection_service import GmailConnectionService
@@ -53,6 +54,15 @@ def gmail_status(
         can_read=GMAIL_READONLY_SCOPE in granted_scopes,
         can_send=GMAIL_SEND_SCOPE in granted_scopes,
     )
+
+
+@router.delete("/connection", status_code=204)
+def disconnect_gmail(
+    user: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    if GmailConnectionRepository(db).delete_for_user(user.id):
+        db.commit()
 
 
 @router.get("/auth-url", response_model=GmailAuthUrl)
