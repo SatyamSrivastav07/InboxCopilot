@@ -240,6 +240,15 @@ def test_cache_get_set_and_dashboard_invalidation():
     assert cache.get_json("cache:dashboard:v1") is None
 
 
+def test_cache_serializes_temporal_dashboard_values():
+    from datetime import datetime, timezone
+
+    redis = FakeRedis()
+    cache = CacheService(redis, ttl_seconds=60)
+    cache.set_json("cache:dashboard:v2", {"received_at": datetime(2026, 8, 26, 12, tzinfo=timezone.utc)})
+    assert cache.get_json("cache:dashboard:v2") == {"received_at": "2026-08-26T12:00:00+00:00"}
+
+
 def test_health_and_readiness_check_database_and_redis(monkeypatch):
     main_module = importlib.import_module("app.main")
 
