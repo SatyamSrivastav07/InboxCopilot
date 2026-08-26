@@ -52,7 +52,16 @@ In Google Cloud Console:
    ```
 
 4. Add the production Vercel domain under **Authorized JavaScript origins** if Google Cloud asks for it.
-5. Keep the consent screen in Testing only for named test accounts. To let the general public connect Gmail, submit the app for Google verification. `gmail.readonly` and `gmail.send` are restricted Gmail scopes, so approval and any required security assessment are external Google requirements.
+5. In the OAuth branding/App Domain page, set the final Vercel URLs for the homepage, privacy policy, and terms of service:
+
+   ```text
+   https://YOUR_VERCEL_DOMAIN/
+   https://YOUR_VERCEL_DOMAIN/privacy
+   https://YOUR_VERCEL_DOMAIN/terms
+   ```
+
+   The home page links to the same privacy policy shown on the consent screen and includes clear Gmail data-use notices.
+6. Keep the consent screen in Testing only for named test accounts. To let the general public connect Gmail, submit the app for Google verification. `gmail.readonly` and `gmail.send` are restricted Gmail scopes, so approval and any required security assessment are external Google requirements.
 
 ## 4. Launch smoke test
 

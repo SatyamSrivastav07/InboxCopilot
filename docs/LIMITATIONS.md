@@ -1,6 +1,6 @@
 # Current Limitations
 
-- Phase 10 implements Google sign-in, signed sessions, and per-user Gmail connections. Public use of `gmail.readonly`/`gmail.send` still requires a correctly configured Google OAuth consent screen and Google's verification/security review process where applicable.
+- Phase 12 adds public homepage, privacy, terms, and data-deletion pages for OAuth launch readiness. Public use of `gmail.readonly`/`gmail.send` still requires a correctly configured Google OAuth consent screen and Google's verification/security review process where applicable.
 - Gmail scopes are deliberately limited to `gmail.readonly` and `gmail.send`; the app cannot modify mailbox labels or delete messages.
 - Reply All and attachment generation/sending are intentionally unsupported.
 - Chroma is embedded persistence for the current project scope, not a large multi-tenant enterprise vector platform.

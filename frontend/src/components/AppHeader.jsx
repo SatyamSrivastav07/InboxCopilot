@@ -21,15 +21,22 @@ export default function AppHeader() {
             <p className="text-sm text-slate-500">Turn email into clear next steps.</p>
           </div>
         </div>
-        <nav className="flex flex-wrap rounded-xl border bg-white p-1" aria-label="Primary navigation">
-          <NavLink className={tabClass} end to="/">Dashboard</NavLink>
-          <NavLink className={tabClass} to="/inbox">Inbox</NavLink>
-          <NavLink className={tabClass} to="/tasks">Tasks</NavLink>
-          <NavLink className={tabClass} to="/meetings">Meetings</NavLink>
-          <NavLink className={tabClass} to="/analyze">Analyze Email</NavLink>
-          <NavLink className={tabClass} to="/gmail">Gmail Inbox</NavLink>
-          <NavLink className={tabClass} to="/assistant">AI Assistant</NavLink>
-        </nav>
+        {user ? (
+          <nav className="flex flex-wrap rounded-xl border bg-white p-1" aria-label="Primary navigation">
+            <NavLink className={tabClass} end to="/">Dashboard</NavLink>
+            <NavLink className={tabClass} to="/inbox">Inbox</NavLink>
+            <NavLink className={tabClass} to="/tasks">Tasks</NavLink>
+            <NavLink className={tabClass} to="/meetings">Meetings</NavLink>
+            <NavLink className={tabClass} to="/analyze">Analyze Email</NavLink>
+            <NavLink className={tabClass} to="/gmail">Gmail Inbox</NavLink>
+            <NavLink className={tabClass} to="/assistant">AI Assistant</NavLink>
+          </nav>
+        ) : (
+          <nav className="flex rounded-xl border bg-white p-1" aria-label="Public navigation">
+            <NavLink className={tabClass} end to="/">About</NavLink>
+            <NavLink className={tabClass} to="/gmail">Connect Gmail</NavLink>
+          </nav>
+        )}
         {user && <div className="flex items-center gap-2 text-sm"><span className="max-w-40 truncate text-slate-500">{user.email || user.display_name}</span><button className="rounded-lg border px-3 py-2 font-semibold text-slate-600 hover:bg-slate-50" type="button" onClick={() => signOut().catch(() => {})}>Sign out</button></div>}
       </div>
     </header>
