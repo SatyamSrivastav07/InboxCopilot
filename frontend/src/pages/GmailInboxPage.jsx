@@ -252,7 +252,7 @@ export default function GmailInboxPage() {
 
       {isSyncing && (
         <div className="card mt-6 flex min-h-48 items-center justify-center text-center" aria-live="polite">
-          <div><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" /><p className="mt-4 font-semibold">Syncing and analyzing your inbox…</p><p className="mt-2 text-lg font-bold text-indigo-700">{syncJob?.progress?.processed || 0} / {syncJob?.progress?.total || limit} emails processed</p><p className="mt-1 text-sm text-slate-500">Keep this tab open until the sync completes.</p>{syncJob?.reused && <p className="mt-2 text-xs text-amber-700">An existing sync job is already running, so it was reused.</p>}</div>
+          <div><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" /><p className="mt-4 font-semibold">Syncing and analyzing your inbox…</p><p className="mt-2 text-lg font-bold text-indigo-700">{syncJob?.progress?.processed || 0} / {syncJob?.progress?.total || limit} emails processed</p><p className="mt-1 text-sm text-slate-500">New emails are analysed securely one at a time. Your first 20 can take a few minutes; already analysed emails load much faster.</p>{syncJob?.reused && <p className="mt-2 text-xs text-amber-700">An existing sync job is already running, so it was reused.</p>}</div>
         </div>
       )}
 

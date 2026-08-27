@@ -96,7 +96,10 @@ export async function getGmailAuthUrl() {
 
 export async function syncGmailInbox(options) {
   try {
-    const { data } = await api.post('/api/gmail/sync', options)
+    // The free deployment performs the first inbox analysis inside this
+    // request. A batch of 20 previously unseen emails can legitimately take
+    // longer than the normal API timeout, especially after a cold start.
+    const { data } = await api.post('/api/gmail/sync', options, { timeout: 5 * 60_000 })
     return data
   } catch (error) {
     throw apiError(error, 'Could not sync the Gmail inbox.')
