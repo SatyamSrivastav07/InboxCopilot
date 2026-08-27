@@ -1,241 +1,212 @@
 # AI Inbox Copilot
 
-An end-to-end GenAI inbox workspace: Gmail email becomes summaries, tasks, meetings, semantic search results, grounded answers, and human-approved reply drafts. PostgreSQL stores product truth; Chroma is a rebuildable semantic index.
+> Turn Gmail into clear, actionable next steps.
 
-## Highlights
+[**Open the live app**](https://inbox-copilot-woad.vercel.app) · [Portfolio](https://portfolio-blond-phi-6yszdranfc.vercel.app/) · [LinkedIn](https://www.linkedin.com/in/satyam-srivastav07/)
 
-- Gmail connection with the minimum scopes: `gmail.readonly` and `gmail.send`.
-- Mistral analysis extracts category, priority, summary, tasks, meetings, entities, and reply need.
-- Dashboard shows real counts, recent important email, and upcoming deadlines.
-- Assistant routes questions to deterministic SQL, semantic RAG, or hybrid answers with source links.
-- Reply drafts are editable and are sent only after explicit approval.
-- Celery + Redis run Gmail sync, reprocessing, and Chroma reindexing in the background.
+AI Inbox Copilot is a full-stack GenAI workspace that connects to a user's Gmail account, analyses recent mail, extracts priorities, tasks, meetings, and answers questions from the user's own inbox. Gmail access is user-authorized and every reply needs explicit approval before it can be sent.
 
-## Architecture
+## What it does
+
+- Secure Google sign-in and per-user Gmail connection.
+- Automatically syncs the latest 20 inbox messages after Gmail is connected.
+- Uses Mistral AI to create summaries, categories, priorities, action items, meetings, entities, and reply-required signals.
+- Stores each user's emails and extracted data in PostgreSQL.
+- Provides an Inbox, Dashboard, Tasks, Meetings, Gmail Inbox, and AI Assistant experience.
+- Uses RAG to answer inbox questions from relevant synced emails rather than generic model knowledge.
+- Creates editable reply drafts; an email is sent only after the user approves it.
+- Includes responsive light/dark themes, data-deletion controls, and privacy/terms pages.
+
+## Product flow
 
 ```mermaid
 flowchart LR
-  Browser[React + Vite / Nginx] -->|REST| API[FastAPI]
-  API --> PG[(PostgreSQL: source of truth)]
-  API --> Redis[(Redis: cache + Celery broker)]
-  API --> Gmail[Gmail API]
-  API --> Mistral[Mistral API]
-  Worker[Celery worker] --> Redis
-  Worker --> PG
-  Worker --> Chroma[(Chroma: semantic index)]
-  API --> Chroma
+    U[User] --> G[Google OAuth]
+    G --> M[Gmail API]
+    M --> S[Sync and parse emails]
+    S --> A[Mistral AI analysis]
+    A --> P[(PostgreSQL)]
+    A --> C[(Chroma semantic index)]
+    P --> UI[Dashboard, Inbox, Tasks, Meetings]
+    C --> R[RAG AI Assistant]
+    R --> UI
 ```
 
-```mermaid
-flowchart TD
-  Question[Assistant question] --> Route{Query router}
-  Route -->|Structured| SQL[PostgreSQL facts]
-  Route -->|Semantic| Retrieve[Chroma retrieval]
-  Route -->|Hybrid| Both[SQL + retrieval]
-  SQL --> Response[Answer + source links]
-  Retrieve --> Evidence{Enough evidence?}
-  Both --> Evidence
-  Evidence -->|No| Safe[Deterministic no-evidence answer]
-  Evidence -->|Yes| Grounded[Mistral grounded answer]
-  Grounded --> Response
-```
+## RAG in this project
 
-## Technology
+When a user asks a question such as *“What deadlines are mentioned in my recent emails?”*, the application:
 
-| Area | Choice |
+1. Searches the user's own indexed inbox for relevant email content.
+2. Sends only that relevant context to Mistral.
+3. Returns a grounded answer based on the retrieved emails.
+
+This keeps answers relevant to the user's inbox and reduces hallucinated responses.
+
+## Tech stack
+
+| Area | Technology |
 | --- | --- |
-| UI | React, Vite, Tailwind CSS |
-| API | FastAPI, Pydantic Settings, SQLAlchemy, Alembic |
-| AI | Mistral through LangChain LCEL |
-| Storage | PostgreSQL and persistent Chroma |
-| Async work | Celery + Redis |
-| Delivery | Docker Compose, Nginx, GitHub Actions |
+| Frontend | React, Vite, Tailwind CSS |
+| Backend | Python, FastAPI, Pydantic, SQLAlchemy, Alembic |
+| AI | Mistral AI, LangChain |
+| Email | Gmail API, Google OAuth 2.0 |
+| Database | PostgreSQL |
+| Semantic search | Chroma vector store |
+| Caching / jobs | Redis-compatible Key Value, Celery for local worker mode |
+| Deployment | Vercel frontend + Render API, PostgreSQL, and Key Value |
+| CI | GitHub Actions |
 
-## Repository layout
+## Architecture
 
 ```text
-frontend/                  React app and Nginx production image
-backend/
-  app/                     API, services, database, GenAI, Gmail, workers
-  alembic/                 PostgreSQL migrations
-  scripts/                 Offline demo seeding and evaluation runner
-  tests/                   Unit, reliability, and evaluation tests
-docs/                      Architecture and limitations notes
-docker-compose.yml         Local production-like stack
+Vercel React app
+      |
+      | same-origin /api rewrite
+      v
+Render FastAPI API
+      |---------------------> Google OAuth + Gmail API
+      |---------------------> Mistral AI
+      |---------------------> PostgreSQL (users, emails, tasks, meetings, drafts)
+      |---------------------> Chroma (semantic email index)
+      └---------------------> Redis / Key Value (cache and local job support)
 ```
 
-## Quick start: Docker Compose
+## Privacy and safety
 
-1. Copy the safe template and set every value marked `CHANGE_ME`:
+- Users can only sync the Gmail account that they authorize.
+- OAuth credentials are encrypted before storage using a Fernet key.
+- Each saved email belongs to a specific user account.
+- The app requests Gmail read access for sync and Gmail send access only for an explicitly approved reply.
+- Users can disconnect Gmail or permanently delete their stored account data from the app.
+- Secrets, `.env` files, tokens, and local database data are excluded from Git.
 
-   ```powershell
-   Copy-Item .env.example .env
-   ```
+## Running locally
 
-2. Set a strong `POSTGRES_PASSWORD`, Compose-network `DATABASE_URL`, Mistral key, and Google OAuth values. The template's `postgres`, `redis`, and `backend` hostnames are intentional.
+### Prerequisites
 
-3. In Google Cloud Console, enable Gmail API and add this redirect URI exactly:
+- Python 3.13+
+- Node.js 22+
+- PostgreSQL
+- Redis (required only for Celery background-worker mode)
+- Google Cloud project with Gmail API enabled
+- Mistral API key
 
-   ```text
-   http://localhost:8000/api/gmail/callback
-   ```
-
-   Add your Gmail account as an OAuth test user. Never commit OAuth secrets or `token.json`.
-
-4. Start the complete stack:
-
-   ```powershell
-   docker compose up --build
-   ```
-
-   Open [http://localhost:5173](http://localhost:5173). Health: [http://localhost:8000/health](http://localhost:8000/health); readiness: [http://localhost:8000/health/ready](http://localhost:8000/health/ready).
-
-5. Stop while keeping database and index volumes:
-
-   ```powershell
-   docker compose down
-   ```
-
-   Use `docker compose down --volumes` only when intentionally erasing local Compose data.
-
-## Local development
-
-Prerequisites: Python 3.13+, Node 22+, PostgreSQL, and Redis.
+### 1. Backend
 
 ```powershell
-# terminal 1 — backend
 cd backend
 Copy-Item .env.example .env
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
 alembic upgrade head
-uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
+### 2. Worker — local background mode only
+
 ```powershell
-# terminal 2 — worker
 cd backend
 .\.venv\Scripts\Activate.ps1
-# Windows uses solo because Celery's prefork process pool is not reliable there.
 celery -A app.workers.celery_app:celery_app worker --loglevel=info --pool=solo
 ```
 
+### 3. Frontend
+
 ```powershell
-# terminal 3 — frontend
 cd frontend
-npm ci
+npm install
 npm run dev
 ```
 
-For a direct local run, Redis URLs should use `redis://localhost:6379` and the database host stays `localhost`. Compose hostnames work only inside Docker.
-On Windows, keep the worker command's `--pool=solo`; the Docker worker runs on Linux and uses two concurrent processes.
+Open `http://localhost:5173`.
 
-## Configuration and security
+## Environment configuration
 
-`backend/app/config.py` centralizes configuration through Pydantic Settings. In `APP_ENV=production`, startup fails if database, Mistral, OAuth, token encryption, HTTPS frontend URL, or restrictive CORS requirements are missing. The API has request IDs, structured request logs, a request-size limit, typed errors, health/readiness endpoints, no-cache API responses, and browser security headers.
+Create `backend/.env` from `backend/.env.example`. Never commit its values.
 
-- `backend/.env.example` is for direct backend development.
-- Root `.env.example` is for Docker Compose.
-- `.env`, OAuth credentials, tokens, Chroma data, and logs are ignored by Git.
-- Frontend requests use same-origin `/api` in Docker/Nginx and `http://localhost:8000` by default in Vite development.
-- `TOKEN_ENCRYPTION_KEY` must be one stable Fernet key in every production environment. Generate it once with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`, store it only in your secret manager, and do not rotate it without a credential migration.
-- `SESSION_SECRET` signs the HTTP-only login cookie. Generate a distinct long random value (for example, `python -c "import secrets; print(secrets.token_urlsafe(48))"`) and keep it stable for the deployment. Changing it signs every user out.
+Important production settings:
 
-## Gmail, reliability, and recovery
-
-Sync returns a Celery job ID immediately; React polls status. PostgreSQL has a unique Gmail-message guard, Redis adds a sync lock, and failed records can be reprocessed. Chroma failure never deletes a persisted email; reindex later. Compose runs `alembic upgrade head` through the `migrate` service. For `not_ready`, inspect `docker compose logs backend worker migrate` and confirm Postgres/Redis health.
-
-## Demo data
-
-Seed clearly labelled synthetic mail without Gmail or Mistral calls:
-
-```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
-python scripts/seed_demo_data.py
+```text
+APP_ENV=production
+DATABASE_URL=postgresql+psycopg2://...
+MISTRAL_API_KEY=...
+TOKEN_ENCRYPTION_KEY=<stable Fernet key>
+SESSION_SECRET=<long random secret>
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=https://your-vercel-domain/api/gmail/callback
+FRONTEND_ORIGINS=https://your-vercel-domain
+FRONTEND_URL=https://your-vercel-domain
+SYNC_EXECUTION_MODE=request
 ```
 
-The seed is idempotent. For semantic search, run the normal full-index action after configuring Mistral.
-
-## Render backend + Vercel frontend
-
-This repository includes a free-demo `render.yaml`: it creates a Render Free API, Postgres, and Redis-compatible Key Value instance. Gmail sync runs inside the user's request, so it needs no always-on Celery worker. See [docs/FREE_DEPLOYMENT.md](docs/FREE_DEPLOYMENT.md) for setup and free-tier limits.
-
-1. Deploy the Vite frontend on Vercel first: import this GitHub repo and set **Root Directory** to `frontend`. Do not set `VITE_API_BASE_URL`; the checked-in Vercel rewrite forwards `/api/*` to the Render API while keeping session cookies first-party. If you deploy under a different Render API domain, update that destination in `frontend/vercel.json` before deploying.
-2. In Render, select **New > Blueprint**, connect the same repository, and choose `render.yaml`. It provisions the included free Postgres and Key Value resources.
-3. In Render's secret prompt, set `MISTRAL_API_KEY`, Google OAuth values, one persistent `TOKEN_ENCRYPTION_KEY`, one persistent `SESSION_SECRET`, and:
-
-   ```text
-   FRONTEND_ORIGINS=https://your-vercel-app.vercel.app
-   FRONTEND_URL=https://your-vercel-app.vercel.app
-   ```
-
-4. Set `GOOGLE_REDIRECT_URI` to the Vercel proxy URL (not the Render URL):
-
-   ```text
-   https://your-vercel-app.vercel.app/api/gmail/callback
-   ```
-
-   Add the same URL in Google Cloud Console under Authorized redirect URIs.
-5. Redeploy after adding both URLs. The full, ordered launch checklist is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-
-Phase 10 enables authenticated Google sign-in, encrypted credentials per account, user-scoped inbox APIs, background jobs, dashboard caches, and semantic retrieval. The browser will first show **Sign in with Google**, then users can sync only their own Gmail inbox.
-
-## Phase 9 — multi-user data foundation
-
-The migration `0005_multi_user_foundation` introduces `users` and encrypted `gmail_connections`, scopes persisted emails/tasks/meetings/drafts to an owner, makes the Gmail message uniqueness rule per user, and adds a user filter to Chroma retrieval metadata. Existing local inbox records are preserved under a `legacy-local-user` account.
-
-For an existing installation:
+Generate a Fernet key once and keep it stable:
 
 ```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
-alembic upgrade head
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-Then run one full reindex before relying on semantic search, so legacy chunks are rebuilt with owner metadata. The next phase adds the login/session layer and passes the authenticated user ID into this foundation; the current app intentionally remains backward-compatible with the existing local Gmail connection.
+## Deployment
 
-## Tests and offline GenAI evaluations
+The deployed architecture uses a Vercel frontend and Render backend resources.
+
+1. Import this repository into Vercel with `frontend` as the Root Directory.
+2. Deploy the repository as a Render Blueprint using `render.yaml`.
+3. Set production secrets in Render; do not put them in GitHub or frontend environment variables.
+4. In Google Cloud Console, register this exact Vercel callback URL under **Authorized redirect URIs**:
+
+   ```text
+   https://your-vercel-domain/api/gmail/callback
+   ```
+
+5. Set the same URL as `GOOGLE_REDIRECT_URI` in Render and redeploy the API.
+
+`frontend/vercel.json` proxies same-origin `/api/*` requests to Render. This preserves first-party browser sessions without exposing backend secrets to the frontend.
+
+### Invite-only Google OAuth
+
+This app is configured for invited testing users:
+
+1. Google Auth Platform → **Audience**.
+2. Keep the app as **External** and **Testing**.
+3. Add intended Gmail accounts under **Test users**.
+4. Do **not** publish the app when access should remain invite-only.
+
+Public access requires Google's verification process for the requested Gmail scopes.
+
+## Testing
 
 ```powershell
+# Backend tests
 cd backend
 .\.venv\Scripts\Activate.ps1
-pytest -q
-python scripts/run_evals.py
+python -m pytest -q
 
+# Frontend production build
 cd ..\frontend
-npm ci
 npm run build
 ```
 
-Offline fixtures use synthetic `@example.test` mail and mock model/retrieval behavior. They cover router choices, RAG no-evidence behavior, citations, and reply-safety guardrails without Gmail, Mistral, or network access.
+## Known free-tier behaviour
 
-## API highlights
+- Render can take time to wake after idle periods.
+- The free deployment performs sync work in the user's request, so the first batch of 20 new messages may take a few minutes.
+- Already analysed messages are reused from PostgreSQL and return much faster on later visits.
+- For a high-volume production app, use a durable always-on worker and hosted vector database.
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /health`, `GET /health/ready` | Liveness and Postgres/Redis readiness |
-| `POST /api/gmail/sync`, `GET /api/jobs/{job_id}` | Queue Gmail sync and monitor it |
-| `GET /api/emails`, `GET /api/emails/{id}` | Persisted inbox and email detail |
-| `GET /api/dashboard` | Counts, important email, and deadlines |
-| `POST /api/search/semantic` | Source-linked semantic search |
-| `POST /api/chat/inbox` | Structured/RAG/hybrid assistant |
-| `POST /api/emails/{id}/draft-reply` | Create editable reply draft |
-| `PATCH /api/drafts/{id}`, `POST /api/drafts/{id}/approve`, `POST /api/drafts/{id}/send` | Human approval flow |
+## Repository layout
 
-## Demo flow
+```text
+frontend/                  React/Vite frontend and Vercel rewrite configuration
+backend/app/               FastAPI routes, Gmail, AI, database, RAG, and services
+backend/alembic/           Database migrations
+backend/tests/             Backend and reliability tests
+docs/                      Deployment, interview, and limitations notes
+render.yaml                Render Blueprint
+```
 
-1. Start the stack and connect Gmail.
-2. Sync a small batch and watch its job status.
-3. Show extracted tasks/meetings and the cleaned original email body.
-4. Ask “What should I prioritize today?” and open a source.
-5. Generate, edit, approve, and explicitly send a reply draft.
-6. Open Dashboard to show live high-priority mail and deadlines.
+## Author
 
-## Further reading
+Built by [Satyam Srivastav](https://www.linkedin.com/in/satyam-srivastav07/).
 
-- [Interview guide](docs/INTERVIEW_GUIDE.md)
-- [Current limitations](docs/LIMITATIONS.md)
-- [Public deployment guide](docs/DEPLOYMENT.md)
-
-Phase 11 is complete: Vercel has a server-side same-origin API proxy for secure public sessions, Render supervises its co-located Celery worker, and the public deployment/OAuth launch checklist is documented. Google verification for Gmail restricted scopes remains an external approval step before opening access beyond test users.
+For questions or collaboration: [satyamsricode07@gmail.com](mailto:satyamsricode07@gmail.com)
