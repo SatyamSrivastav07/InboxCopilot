@@ -159,10 +159,10 @@ export default function GmailInboxPage() {
   }
 
   useEffect(() => {
-    if (automaticSyncStarted.current || callbackStatus !== 'connected' || !session?.authenticated || !gmailStatus?.connected) return
+    if (automaticSyncStarted.current || !session?.authenticated || !gmailStatus?.connected) return
     automaticSyncStarted.current = true
     void sync({ requestedLimit: 20, requestedUnreadOnly: false })
-  }, [callbackStatus, gmailStatus?.connected, session?.authenticated])
+  }, [gmailStatus?.connected, session?.authenticated])
 
   const clearCallbackNotice = () => {
     setSearchParams({}, { replace: true })
