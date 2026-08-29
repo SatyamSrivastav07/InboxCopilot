@@ -86,6 +86,16 @@
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
+.install-app-button {
+  border-color: rgb(99 102 241 / 0.3);
+  background: rgb(238 242 255 / 0.9);
+  color: rgb(67 56 202);
+}
+
+.install-app-button:hover {
+  background: rgb(224 231 255);
+}
+
 .theme-toggle:hover {
   transform: translateY(-1px);
   background: rgb(248 250 252);
@@ -133,6 +143,7 @@ html.dark .brand-mark__image--dark {
 
 html.dark .app-nav,
 html.dark .theme-toggle,
+html.dark .install-app-button,
 html.dark .sign-out-button,
 html.dark .user-menu {
   border-color: rgb(71 85 105 / 0.8);
@@ -141,6 +152,7 @@ html.dark .user-menu {
 }
 
 html.dark .theme-toggle:hover,
+html.dark .install-app-button:hover,
 html.dark .sign-out-button:hover {
   background: rgb(30 41 59);
   color: #e6edff;

@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
+import PWAInstallButton from './PWAInstallButton.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
 
 const tabClass = ({ isActive }) =>
@@ -42,6 +43,7 @@ export default function AppHeader() {
             <NavLink className={tabClass} to="/gmail">Connect Gmail</NavLink>
           </nav>
         )}
+          <PWAInstallButton />
           <ThemeToggle />
           {user && <div className="user-menu flex items-center gap-2 text-sm"><span className="max-w-40 truncate text-slate-500">{user.email || user.display_name}</span><button className="sign-out-button rounded-lg border px-3 py-2 font-semibold text-slate-600 hover:bg-slate-50" type="button" onClick={() => signOut().catch(() => {})}>Sign out</button></div>}
         </div>
